@@ -1,89 +1,90 @@
 <div align="center">
-  <img src="https://img.shields.io/badge/UrbanKart-Primary-4EA94B?style=for-the-badge&logo=mongodb" alt="UrbanKart Logo Badge" />
-  <h1>🛒 UrbanKart</h1>
-  <p><strong>Intelligent NoSQL E-Commerce Platform</strong></p>
-  <p>
-    <a href="https://github.com/charan21042005/urbankart/graphs/commit-activity"><img src="https://img.shields.io/badge/Maintained%3F-yes-green.svg?style=for-the-badge" alt="Maintained" /></a>
-    <img src="https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" />
-    <img src="https://img.shields.io/badge/Express.js-404D59?style=for-the-badge" alt="Express" />
-    <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
-    <img src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
-  </p>
-  <p><em>Built as a comprehensive demonstration of Advanced MongoDB capabilities for CSE494</em></p>
+
+# 🛒 UrbanKart
+**Intelligent NoSQL E-Commerce Platform**
+
+![MongoDB](https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white)
+![Express.js](https://img.shields.io/badge/Express.js-404D59?style=for-the-badge&logo=express&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+
+*A comprehensive demonstration of advanced document-oriented database design, flexible schema management, and performance optimization techniques for CSE494.*
+
 </div>
 
----
+## 📖 Overview
+UrbanKart is a multi-vendor e-commerce platform built as an academic capstone. It transcends a basic CRUD application to explore intelligent NoSQL capabilities, including embedding vs. referencing, the Attribute Pattern, and MongoDB transactions, to solve real-world relational bottlenecks.
 
-<details open>
-  <summary><b>Table of Contents</b></summary>
-  <ul>
-    <li><a href="#-project-overview">Project Overview</a></li>
-    <li><a href="#-technology-stack">Technology Stack</a></li>
-    <li><a href="#-project-structure">Project Structure</a></li>
-    <li><a href="#-relevance-to-cse494">Relevance to CSE494</a></li>
-    <li><a href="#-development-status">Development Status</a></li>
-  </ul>
-</details>
+## 🏗️ High-Level Architecture
+UrbanKart processes operations through a clean, decoupled SOA (Service-Oriented Architecture):
 
----
-
-## 📖 Project Overview
-
-**UrbanKart** is a multi-vendor e-commerce platform built to showcase Intelligent NoSQL Database concepts. It transcends a basic CRUD application, presenting a robust platform engineered to solve traditional relational bottlenecks through document-oriented database design, flexible schema management, and granular performance optimization techniques.
-
-### 🎯 Objective
-To engineer a scalable backend using Node.js and MongoDB Atlas that leverages deep NoSQL features to solve real-world e-commerce challenges such as highly variable product attributes, robust inventory handling, and dynamic recommendations. 
-
----
-
-## 🛠️ Technology Stack
-
-| Layer | Technologies Used | Description |
-|---|---|---|
-| **Frontend** | React.js, TailwindCSS | Modern, responsive component-based UI architecture. |
-| **Backend** | Node.js, Express.js | High-performance asynchronous API layer. |
-| **Database** | MongoDB Atlas, Mongoose | Flexible document model with schema validation. |
-| **Security** | JWT, bcrypt | Stateless authentication and secure password hashing. |
-| **Ops** | Git, GitHub | Strict Conventional Commits monorepo workflow. |
-
----
-
-## 📂 Project Structure
-
-This project follows a strict monorepo architecture for full-stack cohesiveness:
-
-```text
-urbankart/
-│
-├── server/                 # Node.js/Express APIs, Models, & Controllers
-├── client/                 # React Frontend & UI Components
-├── docs/                   # Planning, roadmap, and project documentation
-├── .github/workflows/      # GitHub Actions and CI/CD pipelines
-├── .env.example            # Environment variables template
-├── .gitignore              # Ignored files configuration
-├── LICENSE                 # MIT License
-└── README.md               # Primary project documentation
+```mermaid
+flowchart TD
+    A[React Client UI] -->|REST API| B(Express.js Backend)
+    B --> C{Services Layer}
+    C -->|Mongoose ODM| D[(MongoDB Atlas)]
+    
+    subgraph Database Features
+    D --> E[Attribute Pattern]
+    D --> F[Schema Validation]
+    D --> G[ACID Transactions]
+    D --> H[Aggregation Pipelines]
+    end
 ```
 
----
+### 🧩 Core Modules
+| Module | Purpose | Technology | Status |
+|---|---|---|---|
+| **M1 – Database Foundation** | Schema design & validation | MongoDB, Mongoose | 🟢 Planned |
+| **M2 – Express API Core** | RESTful routing & controllers | Node.js, Express | 🟢 Planned |
+| **M3 – Authentication** | Secure vendor/user access | JWT, bcrypt | 🟢 Planned |
+| **M4 – E-Commerce Engine** | Cart & Checkout Transactions | MongoDB Transactions | 🟢 Planned |
+| **M5 – Intelligent Analytics** | Complex queries & recommendations | MongoDB Aggregations | 🟢 Planned |
+| **M6 – React Client** | Interactive frontend portal | React, TailwindCSS | 🟢 Planned |
 
-## 🎓 Relevance to CSE494 (Intelligent NoSQL Databases)
+## 🛠️ Technology Stack
+<details>
+<summary><b>View Tech Stack</b></summary>
 
-UrbanKart directly bridges theory with practice for **CSE494** through the implementation of:
-- **Document-Oriented Modeling:** Emphasizing when to use *Embedding vs. Referencing*.
-- **The Attribute Pattern:** Handling complex products (e.g., electronics vs. clothing) seamlessly without schema bloat.
-- **Transactions & Concurrency:** Ensuring safe, atomic checkout processing and strict stock deduction.
-- **Indexing & Aggregations:** Optimizing global search queries and building intensive analytics data pipelines.
-- **Data Integrity Validation:** Enforcing MongoDB schema validation in tandem with Mongoose ODM models.
+- **Frontend:** React.js, TailwindCSS
+- **Backend:** Node.js, Express.js
+- **Database:** MongoDB Atlas, Mongoose ODM
+- **Authentication:** JSON Web Tokens (JWT)
+- **Infrastructure:** Git, GitHub Monorepo
+</details>
 
----
+## 📅 Day-wise Roadmap
+* **Day 1: Project Foundation** (Monorepo, GitHub setup)
+* **Day 2: Database Schemas** (Mongoose, Attribute Pattern)
+* **Day 3: Core API & Auth** (Express, JWT)
+* **Day 4: Checkout & Transactions** (MongoDB ACID)
+* **Day 5: Intelligent Analytics** (Aggregation Pipelines)
+* **Day 6: React Frontend & Review** (UI Integration)
 
-## 🚀 Development Status
+## 🚦 Current Implementation Status
+**Current Phase: Day 1 — Monorepo Foundation & Initial Setup**
+- [x] **Repository Setup:** Complete
+- [x] **Environment Configuration:** Complete
+- [x] **Monorepo Structure:** Complete
+- [ ] **MongoDB Atlas Setup:** Not started
+- [ ] **Mongoose Models:** Planned
+- [ ] **Express API:** Planned
 
-> **Current Phase:** Day 1 — Monorepo Foundation & Initial Setup
+## 📂 Repository Structure
+- `server/` - Node.js/Express Backend and MongoDB logic
+- `client/` - React Frontend (To be added)
+- `docs/` - Planning, roadmap, and project documentation
+- `.github/workflows/` - CI automation
+- `.env.example` - Environment variables template
 
-*Continuous integration and detailed setup instructions will be published as development iterations proceed.*
+## 🎓 Learning & Engineering Philosophy
+UrbanKart is built incrementally. Each stage focuses on understanding *why* a NoSQL architectural decision is made (e.g., Embedding vs. Referencing) rather than just making it work. This ensures deep comprehension for the CSE494 academic defense.
 
 <div align="center">
-  <sub>Built with ❤️ and JavaScript</sub>
+<hr>
+<b>UrbanKart</b><br>
+<i>Intelligent NoSQL E-Commerce Platform</i><br>
+Built for CSE494 Intelligent NoSQL Databases.<br>
+<br>
 </div>
