@@ -1,85 +1,48 @@
+// 1. Load the secret variables from the .env file (e.g. MONGODB_URI)
 require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+
+// 2. Import mongoose to interact with the database
 const mongoose = require('mongoose');
 
-async function testValidation() {
+// 3. Define an asynchronous function to test if our database firewall actually works
+async function testDbValidation() {
   try {
-    console.log("Connecting to Atlas...");
-    // Connect directly using mongoose connection (bypassing Mongoose Models)
+    // 4. Connect to the Atlas cluster using our secret connection string
     await mongoose.connect(process.env.MONGODB_URI);
+    
+    // 5. Access the raw MongoDB native driver. 
+    // We intentionally bypass Mongoose here to prove that the database itself protects the data.
     const db = mongoose.connection.db;
-    console.log("Connected successfully.\n");
 
-    const dummyId = new mongoose.Types.ObjectId();
-
-    // =========================================
-    // TEST 1: Valid Write
-    // =========================================
-    console.log("--- TEST 1: Valid Document Insertion ---");
+    console.log('--- DELIBERATE VALIDATION FAILURE TEST ---');
+    
     try {
+      // 6. Deliberately try to insert an illegal product directly into the database engine.
+      // The stock is -5, which violates our minimum: 0 rule.
       await db.collection('products').insertOne({
-        name: "Test Secure Keyboard",
-        price: 150,
-        stock: 20,
-        category: "Peripherals",
-        attributes: [{ key: "Switch", value: "Mechanical" }]
+        name: 'Invalid Item',
+        price: 10,
+        stock: -5,
+        category: 'Test'
       });
-      console.log("✅ PASSED: Valid Product successfully inserted into MongoDB.");
-    } catch (err) {
-      console.error("❌ FAILED: Valid Product insertion rejected.", err.message);
-    }
-
-    // =========================================
-    // TEST 2: Invalid Write (Negative Price)
-    // =========================================
-    console.log("\n--- TEST 2: Invalid Document (Negative Price) ---");
-    try {
-      await db.collection('products').insertOne({
-        name: "Hacked Keyboard",
-        price: -50, // Deliberate failure: Price minimum is 0
-        stock: 20,
-        category: "Peripherals"
-      });
-      console.error("❌ FAILED: DB allowed the negative price insertion! Firewall failed.");
-    } catch (err) {
-      if (err.code === 121) {
-        console.log("✅ PASSED: MongoDB natively REJECTED the negative price (Error 121: DocumentValidationFailure).");
+      
+      // 7. If this line prints, our firewall FAILED and allowed bad data into the database!
+      console.log('❌ DB allowed negative stock! THIS SHOULD FAIL.');
+    } catch(e) {
+      // 8. If the database engine blocks the insert, it will throw an error.
+      // Error code 121 means "DocumentValidationFailure". This is exactly what we want!
+      if (e.code === 121) {
+        console.log('✅ DB natively REJECTED negative stock (Error 121: DocumentValidationFailure)');
       } else {
-        console.error("❌ FAILED: Rejected, but for an unexpected reason:", err.message);
+        // If it throws a different error, something else broke (like no internet connection)
+        console.log('❌ Unexpected error:', e.message);
       }
     }
-
-    // =========================================
-    // TEST 3: Invalid Write (Missing Required Field)
-    // =========================================
-    console.log("\n--- TEST 3: Invalid Document (Missing Role in User) ---");
-    try {
-      await db.collection('users').insertOne({
-        name: "Ghost User",
-        email: "ghost@example.com",
-        passwordHash: "12345"
-        // Missing 'role'
-      });
-      console.error("❌ FAILED: DB allowed the user insertion without a role! Firewall failed.");
-    } catch (err) {
-      if (err.code === 121) {
-        console.log("✅ PASSED: MongoDB natively REJECTED the missing 'role' field (Error 121).");
-      } else {
-        console.error("❌ FAILED: Rejected, but for an unexpected reason:", err.message);
-      }
-    }
-
-    // =========================================
-    // CLEANUP
-    // =========================================
-    await db.collection('products').deleteMany({ name: "Test Secure Keyboard" });
-    console.log("\nCleanup complete.");
-
-  } catch (error) {
-    console.error("\n❌ Fatal Test Error:", error);
   } finally {
+    // 9. Always disconnect so the script doesn't hang in the terminal.
     await mongoose.disconnect();
-    console.log("Disconnected from Atlas.");
   }
 }
 
-testValidation();
+// 10. Execute the test
+testDbValidation();

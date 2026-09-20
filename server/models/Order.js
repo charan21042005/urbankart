@@ -1,63 +1,63 @@
+// 1. Import Mongoose to define the schema
 const mongoose = require('mongoose');
 
-// Define the schema for historical order items
-// _id: false prevents generating unnecessary ObjectIds for these embedded snapshots.
+// 2. Define a sub-schema for items within an order (The Snapshot Pattern)
+// We DO NOT just store the productId. We must "hardcopy" the name and price at the exact moment of checkout.
+// If the store owner changes the product price tomorrow, the historical order receipt MUST stay the same.
 const orderItemSchema = new mongoose.Schema({
-  productId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product', // Identifies the Product model for population, preserving the relationship.
-    required: true // An order item must reference a valid product origin.
+  // Reference to the original product (useful for analytics like "How many times was this bought?")
+  productId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Product', 
+    required: true 
   },
-  nameAtPurchase: {
-    type: String,
-    required: true,
-    trim: true // Prevents formatting bugs on the invoice caused by accidental spaces.
-  },
-  priceAtPurchase: {
-    type: Number,
-    required: true,
-    min: 0 // Freezes the financial value and prevents malicious negative pricing on the historical invoice.
-  },
-  qty: {
-    type: Number,
-    required: true,
-    min: 1, // Prevents 0 or negative quantities from corrupting the order.
-    validate: {
-      validator: Number.isInteger, // Ensures the customer purchased whole integer units.
-      message: 'Quantity must be an integer.'
-    }
+  
+  // The exact name of the product at the time the user bought it.
+  nameAtPurchase: { type: String, required: true },
+  
+  // The exact price the user paid at the time of purchase.
+  priceAtPurchase: { type: Number, required: true, min: 0 },
+  
+  // The quantity purchased.
+  qty: { 
+    type: Number, 
+    required: true, 
+    min: 1, 
+    validate: { validator: Number.isInteger, message: 'Quantity must be an integer.' }
   }
-}, { _id: false });
-
-const orderSchema = new mongoose.Schema({
-  customerId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User', // Identifies the User model for population.
-    required: true // Every order must be explicitly tied to a customer account.
-  },
-  items: {
-    type: [orderItemSchema], // Embeds the historical snapshot items.
-    required: true,
-    validate: {
-      validator: (v) => Array.isArray(v) && v.length > 0, // Domain validation: an order cannot be empty.
-      message: 'An order must contain at least one item.'
-    }
-  },
-  totalAmount: {
-    type: Number,
-    required: true,
-    min: 0 // Safeguards the total invoice amount against negative calculation exploits.
-  },
-  status: {
-    type: String,
-    required: true // Tracks fulfillment state, exact enum allowed values are pending SRS definition.
-  },
-  orderDate: {
-    type: Date,
-    required: true,
-    default: Date.now // Automatically records the exact moment the order contract was executed.
-  }
+}, { 
+  // We disable ObjectIds for these sub-documents to save space in the database
+  _id: false 
 });
-// Explicitly NOT adding { timestamps: true } to adhere strictly to the SRS 'orderDate' requirement.
 
+// 3. Define the main Order Schema representing a finalized checkout.
+const orderSchema = new mongoose.Schema({
+  // The customer who placed the order. References the 'User' collection.
+  customerId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: true 
+  },
+  
+  // The array of items they bought, using the snapshot schema defined above.
+  items: [orderItemSchema],
+  
+  // The total final calculated price of the order.
+  totalAmount: { type: Number, required: true, min: 0 },
+  
+  // The current progression state of the order. Defaults to 'pending'.
+  status: { 
+    type: String, 
+    enum: ['pending', 'shipped', 'delivered', 'cancelled'], 
+    default: 'pending' 
+  },
+  
+  // When the order was placed.
+  orderDate: { type: Date, default: Date.now }
+}, { 
+  // Automatically manage 'createdAt' and 'updatedAt' timestamps
+  timestamps: true 
+});
+
+// 4. Compile the schema into a Mongoose model named 'Order' and export it
 module.exports = mongoose.model('Order', orderSchema);

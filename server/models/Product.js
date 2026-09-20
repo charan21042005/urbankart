@@ -1,53 +1,56 @@
+// 1. Import Mongoose, which is the library we use to model our MongoDB data
 const mongoose = require('mongoose');
 
-// Define the Attribute subdocument schema
-// _id: false prevents Mongoose from generating unnecessary ObjectIds for simple key-value pairs, saving database space.
+// 2. Define a sub-schema for Product Attributes (The Attribute Pattern)
+// This allows us to store flexible key-value pairs (like { key: "RAM", value: "16GB" }) 
+// for diverse products without adding hundreds of empty columns to our main schema.
 const attributeSchema = new mongoose.Schema({
-  key: {
-    type: String,
-    required: true
-  },
-  value: {
-    type: String,
-    required: true
-  }
-}, { _id: false });
+  // The name of the attribute (e.g., 'Size', 'Color')
+  key: { type: String, required: true, trim: true },
+  
+  // The value of the attribute (e.g., 'Medium', 'Red')
+  value: { type: String, required: true, trim: true }
+}, { 
+  // Disable automatic ObjectIds for these tiny sub-documents to save database storage space
+  _id: false 
+});
 
+// 3. Define the main Product Schema. This is the blueprint for how every product must look in the database.
 const productSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true // Prevents duplicate entries or search issues caused by accidental trailing spaces.
-  },
-  description: {
-    type: String
-    // Optional field. Purely informational, no strict validation required.
-  },
-  price: {
-    type: Number,
-    required: true,
-    min: 0 // Enforced at DB layer to ensure malicious actors cannot create products with negative prices.
-  },
-  stock: {
-    type: Number,
-    required: true,
-    min: 0, // Prevents negative inventory (e.g., selling more than we have).
-    default: 0, // Safely defaults to 'Out of Stock' rather than causing null pointer errors if omitted.
+  // The name of the product. It is required, and 'trim' removes accidental spaces before saving.
+  name: { type: String, required: true, trim: true },
+  
+  // An optional description of the product.
+  description: { type: String },
+  
+  // The price of the product. It must be a number, and 'min: 0' prevents negative prices.
+  price: { type: Number, required: true, min: 0 },
+  
+  // The inventory stock level. It defaults to 0 if not provided.
+  stock: { 
+    type: Number, 
+    required: true, 
+    min: 0, 
+    default: 0, 
+    // This custom validator ensures the stock is an absolute whole number (integer). 
+    // You cannot sell 1.5 laptops.
     validate: {
       validator: Number.isInteger,
       message: 'Stock must be an integer.'
     }
   },
-  category: {
-    type: String,
-    required: true,
-    trim: true // Required for accurate UI filtering and categorization without whitespace errors.
-  },
-  // The Attribute Pattern: Allows polymorphic products (laptops vs shirts) to coexist cleanly without schema bloat.
+  
+  // The category the product belongs to (e.g., 'Electronics', 'Apparel')
+  category: { type: String, required: true, trim: true },
+  
+  // This is an array that uses the 'attributeSchema' we defined above.
+  // A single product can have 0, 1, or 50 dynamic attributes stored here.
   attributes: [attributeSchema]
 }, { 
-  // Automatically creates and manages 'createdAt' and 'updatedAt' timestamps.
+  // This automatically adds 'createdAt' and 'updatedAt' timestamps to every product document
   timestamps: true 
 });
 
+// 4. Compile our blueprint schema into an active Mongoose Model named 'Product' and export it.
+// Mongoose will automatically look for a MongoDB collection named 'products' (pluralized).
 module.exports = mongoose.model('Product', productSchema);

@@ -1,45 +1,38 @@
+// 1. Import Mongoose to define the schema
 const mongoose = require('mongoose');
 
-// Define the schema for the embedded related products
-// _id: false prevents Mongoose from allocating space for ObjectIds since these are strictly dependent data points.
-const relatedProductSchema = new mongoose.Schema({
-  productId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product', // Allows the frontend to .populate() and retrieve the actual suggested item details.
-    required: true // A recommendation score is meaningless without a target product.
-  },
-  score: {
-    type: Number,
-    required: true
-    // Note: The SRS similarity algorithm generates this score. We omit boundary constraints to prevent premature 
-    // assumption of the algorithm's mathematical range.
-  }
-}, { _id: false });
-
+// 2. Define the Recommendation Schema (The Materialized View Pattern).
+// Calculating "Users who bought X also bought Y" takes immense computing power.
+// Instead of calculating it on-the-fly when a user loads a page, a background system will calculate it
+// overnight and save the final result here. This makes reading the recommendations incredibly fast.
 const recommendationSchema = new mongoose.Schema({
-  productId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Product', // Identifies the primary "source" product the user is currently viewing.
-    required: true,
-    unique: true // Ensures only one materialized view document exists per source product.
+  // The main source product we are generating recommendations for.
+  productId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Product', 
+    required: true, 
+    // A product can only have one active recommendation list at a time
+    unique: true 
   },
-  relatedProducts: {
-    type: [relatedProductSchema],
-    validate: {
-      validator: function(v) {
-        return v.length <= 5;
-      },
-      // Implementation validation choice: Derived from the SRS's `.slice(0, 5)` batch job logic 
-      // to guarantee the materialized view never bloats beyond the expected UI limit.
-      message: 'A product can have a maximum of 5 recommendations.'
+  
+  // An array of products that are statistically related to the main product.
+  relatedProducts: [{
+    // The related product's ID
+    productId: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'Product', 
+      required: true 
+    },
+    // The algorithmic similarity score (e.g. how strongly they are related)
+    score: { 
+      type: Number, 
+      required: true 
     }
-  },
-  computedAt: {
-    type: Date,
-    required: true
-    // Explicitly defines when the nightly batch job last ran, allowing the system to detect stale recommendations.
-  }
+  }],
+  
+  // When this recommendation was generated. Helps us know if the data is stale/old.
+  computedAt: { type: Date, required: true }
 });
-// Explicitly omitting { timestamps: true } as per SRS specifications.
 
+// 3. Compile the schema into a Mongoose model named 'Recommendation' and export it
 module.exports = mongoose.model('Recommendation', recommendationSchema);

@@ -1,243 +1,230 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+// 1. Import Mongoose to connect to the database
 const mongoose = require('mongoose');
+
+// 2. Load the secret variables from the .env file (e.g. MONGODB_URI)
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+
+// 3. Import our Product model so we can insert data into the 'products' collection
 const Product = require('../models/Product');
 
+// 4. Create an array of mock (seed) data. This provides realistic data for our frontend to use during development.
 const seedProducts = [
-  // Electronics
+  // --- Electronics ---
   {
     name: "Urban X-Pro Laptop",
     description: "High-performance laptop for professionals",
     price: 1299,
     stock: 25,
     category: "Electronics",
+    // Here we use the Attribute Pattern to store specs specific to laptops
     attributes: [
       { key: "processor", value: "Intel Core i7" },
-      { key: "ram", value: "16GB" },
-      { key: "storage", value: "512GB SSD" },
-      { key: "display", value: "15.6 inch 4K" }
+      { key: "ram", value: "16GB" }
     ]
   },
   {
-    name: "Quantum Noise-Cancelling Headphones",
-    description: "Industry-leading wireless headphones",
-    price: 299,
+    name: "Noise-Cancelling Headphones",
+    description: "Over-ear headphones with active noise cancellation",
+    price: 249,
     stock: 50,
     category: "Electronics",
     attributes: [
-      { key: "connectivity", value: "Bluetooth 5.0" },
-      { key: "batteryLife", value: "30 hours" },
-      { key: "color", value: "Matte Black" }
+      { key: "color", value: "Black" },
+      { key: "battery", value: "30 hours" }
     ]
   },
   {
-    name: "NextGen Smartphone Ultra",
-    description: "Flagship smartphone with an incredible camera",
-    price: 999,
-    stock: 120,
+    name: "Smartphone Z1",
+    description: "Latest 5G smartphone with amazing camera",
+    price: 899,
+    stock: 100,
     category: "Electronics",
     attributes: [
-      { key: "processor", value: "Snapdragon 8 Gen 2" },
-      { key: "storage", value: "256GB" },
-      { key: "display", value: "6.7 inch OLED" },
-      { key: "connectivity", value: "5G" }
+      { key: "storage", value: "128GB" },
+      { key: "color", value: "Silver" }
     ]
   },
   {
-    name: "Echo Smart Speaker",
-    description: "Voice-controlled smart home hub",
-    price: 99,
-    stock: 200,
-    category: "Electronics",
-    attributes: [
-      { key: "connectivity", value: "Wi-Fi" },
-      { key: "color", value: "Charcoal" }
-    ]
-  },
-  {
-    name: "Vision 4K Action Camera",
-    description: "Waterproof rugged action camera",
+    name: "4K Action Camera",
+    description: "Waterproof action camera for adventures",
     price: 199,
-    stock: 45,
+    stock: 30,
     category: "Electronics",
     attributes: [
-      { key: "storage", value: "MicroSD up to 256GB" },
-      { key: "connectivity", value: "Wi-Fi, Bluetooth" }
+      { key: "resolution", value: "4K" },
+      { key: "waterproof", value: "Up to 50m" }
     ]
   },
   {
-    name: "Titan Mechanical Keyboard",
-    description: "RGB mechanical gaming keyboard",
-    price: 149,
+    name: "Smartwatch Series 5",
+    description: "Health and fitness tracking smartwatch",
+    price: 349,
     stock: 75,
     category: "Electronics",
     attributes: [
-      { key: "switch", value: "Cherry MX Red" },
-      { key: "connectivity", value: "Wired USB-C" }
+      { key: "strap_color", value: "Blue" },
+      { key: "water_resistant", value: "Yes" }
+    ]
+  },
+  {
+    name: "Wireless Charging Pad",
+    description: "Fast wireless charger for multiple devices",
+    price: 49,
+    stock: 150,
+    category: "Electronics",
+    attributes: [
+      { key: "power", value: "15W" }
     ]
   },
 
-  // Apparel
+  // --- Apparel ---
   {
     name: "Classic Denim Jacket",
-    description: "Timeless blue denim jacket for everyday wear",
-    price: 59,
+    description: "Vintage style denim jacket for men",
+    price: 79,
     stock: 80,
     category: "Apparel",
+    // Here we use the Attribute Pattern for clothing specs. No empty columns required!
     attributes: [
       { key: "size", value: "M" },
-      { key: "color", value: "Blue" },
-      { key: "material", value: "100% Cotton" },
-      { key: "fit", value: "Regular" }
-    ]
-  },
-  {
-    name: "Athletic Performance Tee",
-    description: "Moisture-wicking workout t-shirt",
-    price: 25,
-    stock: 150,
-    category: "Apparel",
-    attributes: [
-      { key: "size", value: "L" },
-      { key: "color", value: "Black" },
-      { key: "material", value: "Polyester Blend" },
-      { key: "fit", value: "Slim" }
-    ]
-  },
-  {
-    name: "Urban Chino Pants",
-    description: "Comfortable and stylish chinos",
-    price: 45,
-    stock: 100,
-    category: "Apparel",
-    attributes: [
-      { key: "size", value: "32x32" },
-      { key: "color", value: "Khaki" },
-      { key: "fit", value: "Straight" }
-    ]
-  },
-  {
-    name: "Winter Wool Coat",
-    description: "Warm and elegant coat for winter",
-    price: 120,
-    stock: 30,
-    category: "Apparel",
-    attributes: [
-      { key: "size", value: "L" },
-      { key: "color", value: "Charcoal" },
-      { key: "material", value: "Wool Blend" }
-    ]
-  },
-  {
-    name: "Floral Summer Dress",
-    description: "Lightweight dress with a floral pattern",
-    price: 35,
-    stock: 60,
-    category: "Apparel",
-    attributes: [
-      { key: "size", value: "S" },
-      { key: "pattern", value: "Floral" },
-      { key: "material", value: "Viscose" }
+      { key: "color", value: "Blue" }
     ]
   },
   {
     name: "Running Sneakers",
-    description: "Lightweight and breathable sneakers",
-    price: 85,
+    description: "Lightweight and breathable running shoes",
+    price: 120,
+    stock: 60,
+    category: "Apparel",
+    attributes: [
+      { key: "size", value: "10" },
+      { key: "color", value: "Neon Green" }
+    ]
+  },
+  {
+    name: "Cotton T-Shirt",
+    description: "100% organic cotton basic t-shirt",
+    price: 25,
+    stock: 200,
+    category: "Apparel",
+    attributes: [
+      { key: "size", value: "L" },
+      { key: "color", value: "White" }
+    ]
+  },
+  {
+    name: "Winter Beanie",
+    description: "Warm knitted beanie for cold weather",
+    price: 15,
+    stock: 120,
+    category: "Apparel",
+    attributes: [
+      { key: "color", value: "Grey" },
+      { key: "material", value: "Wool" }
+    ]
+  },
+  {
+    name: "Yoga Pants",
+    description: "High-waisted stretch yoga pants",
+    price: 45,
     stock: 90,
     category: "Apparel",
     attributes: [
-      { key: "size", value: "10 US" },
-      { key: "color", value: "Neon Green" },
-      { key: "material", value: "Mesh" }
+      { key: "size", value: "S" },
+      { key: "color", value: "Black" }
+    ]
+  },
+  {
+    name: "Leather Belt",
+    description: "Genuine leather belt with classic buckle",
+    price: 35,
+    stock: 110,
+    category: "Apparel",
+    attributes: [
+      { key: "length", value: "34 inches" },
+      { key: "color", value: "Brown" }
     ]
   },
 
-  // Groceries
+  // --- Groceries ---
   {
     name: "Organic Whole Milk",
-    description: "Fresh organic whole milk from pasture-raised cows",
+    description: "Fresh organic whole milk",
     price: 4,
     stock: 200,
     category: "Groceries",
+    // Here we use the Attribute Pattern for food specs.
     attributes: [
       { key: "weight", value: "1 Gallon" },
-      { key: "organic", value: "Yes" },
-      { key: "shelfLife", value: "14 days" },
-      { key: "packaging", value: "Plastic Jug" }
-    ]
-  },
-  {
-    name: "Artisan Sourdough Bread",
-    description: "Freshly baked sourdough loaf",
-    price: 6,
-    stock: 40,
-    category: "Groceries",
-    attributes: [
-      { key: "weight", value: "16 oz" },
-      { key: "organic", value: "No" },
-      { key: "flavor", value: "Sourdough" }
-    ]
-  },
-  {
-    name: "Premium Arabica Coffee Beans",
-    description: "Whole bean medium roast coffee",
-    price: 14,
-    stock: 150,
-    category: "Groceries",
-    attributes: [
-      { key: "weight", value: "12 oz" },
-      { key: "flavor", value: "Medium Roast" },
-      { key: "packaging", value: "Resealable Bag" }
-    ]
-  },
-  {
-    name: "Extra Virgin Olive Oil",
-    description: "Cold-pressed extra virgin olive oil",
-    price: 18,
-    stock: 75,
-    category: "Groceries",
-    attributes: [
-      { key: "weight", value: "750 ml" },
-      { key: "organic", value: "Yes" },
-      { key: "packaging", value: "Glass Bottle" }
-    ]
-  },
-  {
-    name: "Fresh Honeycrisp Apples",
-    description: "Crisp and sweet organic apples",
-    price: 5,
-    stock: 300,
-    category: "Groceries",
-    attributes: [
-      { key: "weight", value: "3 lbs" },
       { key: "organic", value: "Yes" }
     ]
   },
   {
-    name: "Free-Range Eggs",
-    description: "Dozen large brown eggs",
-    price: 6,
-    stock: 120,
+    name: "Whole Wheat Bread",
+    description: "Freshly baked whole wheat loaf",
+    price: 3,
+    stock: 150,
     category: "Groceries",
     attributes: [
-      { key: "packaging", value: "Cardboard Carton" },
-      { key: "organic", value: "Yes" },
-      { key: "shelfLife", value: "30 days" }
+      { key: "weight", value: "500g" }
+    ]
+  },
+  {
+    name: "Avocados (Pack of 4)",
+    description: "Ripe Hass avocados",
+    price: 6,
+    stock: 80,
+    category: "Groceries",
+    attributes: [
+      { key: "origin", value: "Mexico" }
+    ]
+  },
+  {
+    name: "Almond Butter",
+    description: "Creamy roasted almond butter",
+    price: 9,
+    stock: 60,
+    category: "Groceries",
+    attributes: [
+      { key: "weight", value: "16 oz" },
+      { key: "sugar_free", value: "Yes" }
+    ]
+  },
+  {
+    name: "Ground Coffee",
+    description: "Dark roast Arabica coffee blend",
+    price: 12,
+    stock: 90,
+    category: "Groceries",
+    attributes: [
+      { key: "weight", value: "12 oz" },
+      { key: "roast", value: "Dark" }
+    ]
+  },
+  {
+    name: "Pasta (Penne)",
+    description: "Durum wheat semolina pasta",
+    price: 2,
+    stock: 300,
+    category: "Groceries",
+    attributes: [
+      { key: "weight", value: "1 lb" }
     ]
   }
 ];
 
+// 5. Define an async function to execute the seed operation
 async function seedDatabase() {
   try {
-    console.log("Connecting to Atlas...");
+    // Connect to the database
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log("Connected successfully.");
-
-    // Clear ONLY the products collection to avoid nuking other domain data
+    
+    // 6. IDEMPOTENCY: Clear ONLY the products collection before inserting.
+    // This allows us to run this script 100 times without duplicating the data 100 times.
     console.log("Clearing existing products...");
     await Product.deleteMany({});
 
-    // Insert new products
+    // 7. Insert all 18 products into the database at once.
     console.log(`Inserting ${seedProducts.length} sample products...`);
     const inserted = await Product.insertMany(seedProducts);
 
@@ -245,9 +232,10 @@ async function seedDatabase() {
   } catch (err) {
     console.error("❌ Seeding Error:", err.message);
   } finally {
-    await mongoose.disconnect();
-    console.log("Disconnected from Atlas.");
+    // 8. Disconnect from the database so the terminal prompt returns
+    mongoose.disconnect();
   }
 }
 
+// 9. Execute the seed operation
 seedDatabase();
