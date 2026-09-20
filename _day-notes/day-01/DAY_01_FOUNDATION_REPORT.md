@@ -1862,6 +1862,9 @@ seedDatabase();
 *   **Lines 24-25:** `await Product.deleteMany({})` is the key to **Idempotency**. This line clears the `products` collection completely before seeding. This guarantees that running the script 100 times results in exactly 18 products, not 1,800 duplicated products. It ensures a highly predictable development environment.
 *   **Line 28:** `Product.insertMany(seedProducts)` leverages Mongoose's bulk-insert capability, pushing all 18 objects across the network to Atlas in a single, lightning-fast batch operation rather than 18 separate writes.
 *   **Lines 31-35:** Proper error handling and graceful database disconnection. Failing to disconnect will cause the Node process to hang infinitely in the terminal.
+
+---
+
 ## 🎯 42. Final Day 1 Retrospective & Conclusion
 
 As we conclude Day 1, it is essential to step back and observe the entire landscape of what we have engineered. We did not merely write a web server; we forged an industrial-grade **NoSQL Foundation**.
