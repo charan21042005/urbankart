@@ -22,6 +22,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Mount Routes
+const productRoutes = require('./routes/productRoutes');
+app.use('/api/products', productRoutes);
+
 /*
  * WHY WE USE ENVIRONMENT VARIABLES FOR THE DATABASE CONNECTION:
  * Hardcoding database credentials in source code exposes sensitive information to version control (GitHub).
