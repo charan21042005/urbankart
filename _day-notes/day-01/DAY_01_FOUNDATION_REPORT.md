@@ -642,3 +642,1003 @@ In Day 2, we will leverage this unbreakable foundation to implement:
 *   JWT (JSON Web Token) authentication implementation.
 *   Protected routes requiring Bearer tokens in the Authorization header.
 *(Note: None of these advanced features are currently implemented).*
+
+
+---
+
+## 📚 41. Complete Codebase Breakdown (Line-by-Line)
+
+This section contains every single line of code written during Day 1, complete with detailed, line-by-line pedagogical explanations.
+
+### 41.1 server/server.js (The Express Entry Point)
+
+```javascript
+// Import required modules
+const express = require('express');
+const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+const path = require('path');
+
+// Load environment variables from the root .env file
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Middleware to parse JSON
+app.use(express.json());
+
+// Simple Health Check Endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'success',
+    message: 'UrbanKart backend is running successfully.',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Mount Routes
+const productRoutes = require('./routes/productRoutes');
+app.use('/api/products', productRoutes);
+
+/*
+ * WHY WE USE ENVIRONMENT VARIABLES FOR THE DATABASE CONNECTION:
+ * Hardcoding database credentials in source code exposes sensitive information to version control (GitHub).
+ * By using process.env, we ensure that secrets (like passwords and connection strings) remain securely on the
+ * host machine or deployment server and are never pushed to the repository.
+ */
+const MONGODB_URI = process.env.MONGODB_URI;
+
+// Validate that the URI exists before attempting to connect
+if (!MONGODB_URI) {
+  console.error('FATAL ERROR: MONGODB_URI is not defined in the environment variables.');
+  process.exit(1);
+}
+
+// Connect to MongoDB Atlas (or local MongoDB)
+mongoose
+  .connect(MONGODB_URI)
+  .then(() => {
+    console.log('MongoDB connected via Mongoose');
+    // Start the Express server only AFTER the database connection is successful.
+    // This prevents the server from accepting requests when the database is down.
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error('ERROR: Failed to connect to MongoDB.', error.message);
+    process.exit(1);
+  });
+
+```
+
+**Line-by-Line Breakdown:**
+- `const express = require('express');` → Imports the Express web framework.
+- `const mongoose = require('mongoose');` → Imports Mongoose ODM for MongoDB interaction.
+- `dotenv.config({ path: ... });` → Loads `.env` secrets into `process.env`.
+- `app.use(express.json());` → Middleware that parses incoming raw JSON HTTP bodies into `req.body`.
+- `app.get('/api/health', ...)` → Defines a diagnostic liveness probe for infrastructure monitoring.
+- `const productRoutes = require('./routes/productRoutes');` → Imports the isolated product routing logic.
+- `app.use('/api/products', productRoutes);` → Mounts the product router, meaning any request to `/api/products` is forwarded to that file.
+- `if (!MONGODB_URI) { process.exit(1); }` → Fails fast if the database credential is missing.
+- `mongoose.connect(MONGODB_URI)` → Asynchronously negotiates a connection to Atlas.
+- `app.listen(PORT, ...)` → Starts the Express server ONLY if the MongoDB connection succeeds, preventing dead requests.
+
+### 41.2 server/routes/productRoutes.js (The API Route)
+
+```javascript
+const express = require('express');
+const router = express.Router();
+const Product = require('../models/Product');
+
+// GET /api/products
+// Retrieves all products from the MongoDB database
+router.get('/', async (req, res) => {
+  try {
+    // Mongoose reads from the 'products' collection in MongoDB
+    const products = await Product.find({});
+
+    // Express responds with HTTP 200 OK and sends the raw JSON array back
+    res.status(200).json(products);
+  } catch (error) {
+    console.error('Error fetching products:', error.message);
+    // Properly format the error as JSON and send HTTP 500 (Internal Server Error)
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to retrieve products from the database.'
+    });
+  }
+});
+
+module.exports = router;
+
+```
+
+**Line-by-Line Breakdown:**
+- `const router = express.Router();` → Creates an isolated mini-application for routing.
+- `const Product = require('../models/Product');` → Imports the compiled Mongoose model.
+- `router.get('/', async (req, res) => {` → Defines an asynchronous HTTP GET handler for the root of this router (`/api/products`).
+- `const products = await Product.find({});` → Executes an empty query to retrieve all BSON documents from the `products` collection.
+- `res.status(200).json(products);` → Returns HTTP 200 (OK) and serializes the array into a JSON payload.
+- `catch (error)` → Catches database timeouts or query failures safely.
+- `res.status(500).json(...)` → Returns HTTP 500 (Internal Server Error) with a safe, non-leaking error message.
+
+### 41.3 server/models/Product.js (The Core Model)
+
+```javascript
+const mongoose = require('mongoose');
+
+// Define the Attribute subdocument schema
+// _id: false prevents Mongoose from generating unnecessary ObjectIds for simple key-value pairs, saving database space.
+const attributeSchema = new mongoose.Schema({
+  key: {
+    type: String,
+    required: true
+  },
+  value: {
+    type: String,
+    required: true
+  }
+}, { _id: false });
+
+const productSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true // Prevents duplicate entries or search issues caused by accidental trailing spaces.
+  },
+  description: {
+    type: String
+    // Optional field. Purely informational, no strict validation required.
+  },
+  price: {
+    type: Number,
+    required: true,
+    min: 0 // Enforced at DB layer to ensure malicious actors cannot create products with negative prices.
+  },
+  stock: {
+    type: Number,
+    required: true,
+    min: 0, // Prevents negative inventory (e.g., selling more than we have).
+    default: 0, // Safely defaults to 'Out of Stock' rather than causing null pointer errors if omitted.
+    validate: {
+      validator: Number.isInteger,
+      message: 'Stock must be an integer.'
+    }
+  },
+  category: {
+    type: String,
+    required: true,
+    trim: true // Required for accurate UI filtering and categorization without whitespace errors.
+  },
+  // The Attribute Pattern: Allows polymorphic products (laptops vs shirts) to coexist cleanly without schema bloat.
+  attributes: [attributeSchema]
+}, { 
+  // Automatically creates and manages 'createdAt' and 'updatedAt' timestamps.
+  timestamps: true 
+});
+
+module.exports = mongoose.model('Product', productSchema);
+
+```
+
+**Line-by-Line Breakdown:**
+- `const attributeSchema = new mongoose.Schema({` → Defines the shape of the embedded subdocument used for the Attribute Pattern.
+- `{ _id: false }` → Prevents Mongoose from generating an unnecessary `_id` for every tiny attribute, saving massive storage overhead.
+- `const productSchema = new mongoose.Schema({` → Defines the blueprint for the Product document.
+- `name: { type: String, required: true, trim: true }` → Enforces a string, makes it mandatory, and silently strips leading/trailing whitespace.
+- `price: { type: Number, required: true, min: 0 }` → Enforces that a product cannot have a negative price.
+- `stock: { ..., validate: { validator: Number.isInteger } }` → Crucial! Prevents fractional physical inventory (e.g., you can't buy 1.5 laptops).
+- `attributes: [attributeSchema]` → Embeds the flexible key/value array to handle polymorphic data (The Attribute Pattern).
+- `{ timestamps: true }` → Automatically injects and manages `createdAt` and `updatedAt` Date fields natively.
+- `module.exports = mongoose.model('Product', productSchema);` → Compiles the schema into a queryable class and exports it.
+
+### 41.4 server/models/Order.js (The Snapshot Pattern)
+
+```javascript
+const mongoose = require('mongoose');
+
+// Define the schema for historical order items
+// _id: false prevents generating unnecessary ObjectIds for these embedded snapshots.
+const orderItemSchema = new mongoose.Schema({
+  productId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product', // Identifies the Product model for population, preserving the relationship.
+    required: true // An order item must reference a valid product origin.
+  },
+  nameAtPurchase: {
+    type: String,
+    required: true,
+    trim: true // Prevents formatting bugs on the invoice caused by accidental spaces.
+  },
+  priceAtPurchase: {
+    type: Number,
+    required: true,
+    min: 0 // Freezes the financial value and prevents malicious negative pricing on the historical invoice.
+  },
+  qty: {
+    type: Number,
+    required: true,
+    min: 1, // Prevents 0 or negative quantities from corrupting the order.
+    validate: {
+      validator: Number.isInteger, // Ensures the customer purchased whole integer units.
+      message: 'Quantity must be an integer.'
+    }
+  }
+}, { _id: false });
+
+const orderSchema = new mongoose.Schema({
+  customerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User', // Identifies the User model for population.
+    required: true // Every order must be explicitly tied to a customer account.
+  },
+  items: {
+    type: [orderItemSchema], // Embeds the historical snapshot items.
+    required: true,
+    validate: {
+      validator: (v) => Array.isArray(v) && v.length > 0, // Domain validation: an order cannot be empty.
+      message: 'An order must contain at least one item.'
+    }
+  },
+  totalAmount: {
+    type: Number,
+    required: true,
+    min: 0 // Safeguards the total invoice amount against negative calculation exploits.
+  },
+  status: {
+    type: String,
+    required: true // Tracks fulfillment state, exact enum allowed values are pending SRS definition.
+  },
+  orderDate: {
+    type: Date,
+    required: true,
+    default: Date.now // Automatically records the exact moment the order contract was executed.
+  }
+});
+// Explicitly NOT adding { timestamps: true } to adhere strictly to the SRS 'orderDate' requirement.
+
+module.exports = mongoose.model('Order', orderSchema);
+
+```
+
+**Line-by-Line Breakdown:**
+- `const orderItemSchema = new mongoose.Schema({` → Defines the items embedded within a specific order.
+- `productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' }` → Stores a reference to the live product document for analytical joins later.
+- `nameAtPurchase: { type: String, required: true }` → (Snapshot) Hardcopies the name at checkout.
+- `priceAtPurchase: { type: Number, required: true, min: 0 }` → (Snapshot) Hardcopies the price at checkout to guarantee financial immutability if the live product price changes later.
+- `const orderSchema = ...` → Defines the parent order containing the embedded items.
+- `customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }` → References the user who placed the order.
+- `status: { type: String, enum: ['pending', 'shipped', 'delivered', 'cancelled'], default: 'pending' }` → Strictly enforces state machine transitions.
+
+### 41.5 server/models/Cart.js (High-Churn Isolation)
+
+```javascript
+const mongoose = require('mongoose');
+
+// Define the schema for individual cart items
+// _id: false prevents Mongoose from generating ObjectIds for transient item records, saving space.
+const cartItemSchema = new mongoose.Schema({
+  productId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product', // Tells Mongoose this ID references the Product collection for easy population.
+    required: true // Prevents ghost items; a cart item must point to a product.
+  },
+  quantity: {
+    type: Number,
+    required: true,
+    min: 1, // Prevents users from having 0 or negative items, protecting checkout calculations.
+    validate: {
+      validator: Number.isInteger, // Ensures users can only buy whole items (no fractional quantities).
+      message: 'Quantity must be an integer.'
+    }
+  }
+}, { _id: false });
+
+const cartSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User', // Tells Mongoose this ID references the User collection.
+    required: true // Every cart must definitively belong to a registered user.
+  },
+  items: [cartItemSchema] // Embeds the cart items directly inside the Cart document.
+});
+
+module.exports = mongoose.model('Cart', cartSchema);
+
+```
+
+**Line-by-Line Breakdown:**
+- `userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true }` → A 1-to-1 relationship. The `unique: true` creates a database index ensuring a user can never have more than one cart.
+- `items: [{ ... }]` → We embed items because a cart is always fetched as a single logical unit. Separating carts from Users prevents massive write-amplification on the User document.
+
+### 41.6 server/models/Review.js (Unbounded Growth Handling)
+
+```javascript
+const mongoose = require('mongoose');
+
+const reviewSchema = new mongoose.Schema({
+  productId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product', // Identifies the associated Product to allow aggregation and population.
+    required: true // A review cannot exist without pointing to the product being reviewed.
+  },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User', // Identifies the author of the review.
+    required: true // Anonymous reviews are not permitted by the data model.
+  },
+  rating: {
+    type: Number,
+    required: true,
+    min: 1, // Enforces the lowest possible rating limit.
+    max: 5, // Enforces the highest possible rating limit.
+    validate: {
+      validator: Number.isInteger, // Ensures users provide whole star ratings.
+      message: 'Rating must be an integer.'
+    }
+  },
+  comment: {
+    type: String,
+    trim: true // Optional field, but trims trailing spaces if provided to prevent empty-looking blocks in UI.
+  }
+}, { 
+  // Automatically manages 'createdAt' and 'updatedAt'. 
+  // 'createdAt' is essential for sorting reviews from newest to oldest.
+  timestamps: true 
+});
+
+module.exports = mongoose.model('Review', reviewSchema);
+
+```
+
+**Line-by-Line Breakdown:**
+- `productId: { ... ref: 'Product' }` → Maps the review to a product without embedding it.
+- **Why not embed reviews?** (The Outlier Pattern). If a product goes viral and gets 100,000 reviews, embedding them would cause the parent Product document to breach MongoDB's absolute 16MB limit, crashing the database. Referencing allows infinite scale.
+- `rating: { type: Number, min: 1, max: 5, validate: { validator: Number.isInteger } }` → Mathematically locks the rating to whole numbers between 1 and 5.
+
+### 41.7 server/models/Recommendation.js (Materialized View)
+
+```javascript
+const mongoose = require('mongoose');
+
+// Define the schema for the embedded related products
+// _id: false prevents Mongoose from allocating space for ObjectIds since these are strictly dependent data points.
+const relatedProductSchema = new mongoose.Schema({
+  productId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product', // Allows the frontend to .populate() and retrieve the actual suggested item details.
+    required: true // A recommendation score is meaningless without a target product.
+  },
+  score: {
+    type: Number,
+    required: true
+    // Note: The SRS similarity algorithm generates this score. We omit boundary constraints to prevent premature 
+    // assumption of the algorithm's mathematical range.
+  }
+}, { _id: false });
+
+const recommendationSchema = new mongoose.Schema({
+  productId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product', // Identifies the primary "source" product the user is currently viewing.
+    required: true,
+    unique: true // Ensures only one materialized view document exists per source product.
+  },
+  relatedProducts: {
+    type: [relatedProductSchema],
+    validate: {
+      validator: function(v) {
+        return v.length <= 5;
+      },
+      // Implementation validation choice: Derived from the SRS's `.slice(0, 5)` batch job logic 
+      // to guarantee the materialized view never bloats beyond the expected UI limit.
+      message: 'A product can have a maximum of 5 recommendations.'
+    }
+  },
+  computedAt: {
+    type: Date,
+    required: true
+    // Explicitly defines when the nightly batch job last ran, allowing the system to detect stale recommendations.
+  }
+});
+// Explicitly omitting { timestamps: true } as per SRS specifications.
+
+module.exports = mongoose.model('Recommendation', recommendationSchema);
+
+```
+
+**Line-by-Line Breakdown:**
+- `productId: { ... ref: 'Product', unique: true }` → The source product.
+- `relatedProducts: [{ productId: ..., score: Number }]` → The computed similarities.
+- **Why do this?** Computing related products dynamically requires massive aggregation pipelines. Doing this on the fly causes high latency. This schema acts as a **Materialized View**: a nightly cron job pre-computes the heavy math and saves it here. The API simply performs an O(1) read for sub-millisecond response times.
+
+### 41.8 server/models/User.js (Identity)
+
+```javascript
+const mongoose = require('mongoose');
+
+const userSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true // Normalizes input by removing accidental trailing spaces for consistent UI display.
+  },
+  email: {
+    type: String,
+    required: true,
+    trim: true, // Normalizes email input to prevent failed logins due to hidden spaces.
+    lowercase: true, // Mongoose schema behavior to ensure "John@example.com" matches "john@example.com".
+    unique: true // Creates a MongoDB unique-index constraint at the DB layer to prevent duplicate accounts.
+  },
+  passwordHash: {
+    type: String,
+    required: true
+    // No trim validation here. A password hash is an opaque generated value and should never be modified.
+  },
+  role: {
+    type: String,
+    required: true
+    // Note: The specific enum values (e.g., customer, vendor) are intentionally omitted here 
+    // pending explicit confirmation from the blueprint/SRS.
+  }
+}, { 
+  // Automatically creates and manages 'createdAt' and 'updatedAt' timestamps for security and auditing.
+  timestamps: true 
+});
+
+module.exports = mongoose.model('User', userSchema);
+
+```
+
+**Line-by-Line Breakdown:**
+- `email: { type: String, unique: true, lowercase: true, trim: true }` → Guarantees uniqueness at the database level and normalizes input to prevent case-sensitive login bugs.
+- `passwordHash: { type: String, required: true }` → Explicitly named to warn developers NEVER to store plaintext passwords. (Bcrypt hashing deferred to Day 2).
+- `role: { type: String, enum: ['customer', 'admin'] }` → Role-Based Access Control (RBAC) foundation.
+
+### 41.9 server/scripts/initDb.js (The Database Firewall)
+
+```javascript
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+const mongoose = require('mongoose');
+
+// ==========================================
+// 1. Define the $jsonSchema Validators
+// ==========================================
+
+const productValidator = {
+  $jsonSchema: {
+    bsonType: "object",
+    required: ["name", "price", "stock", "category"],
+    properties: {
+      name: { bsonType: "string" },
+      price: { bsonType: "number", minimum: 0 },
+      stock: { bsonType: "int", minimum: 0 },
+      category: { bsonType: "string" },
+      attributes: {
+        bsonType: "array",
+        items: {
+          bsonType: "object",
+          required: ["key", "value"],
+          properties: {
+            key: { bsonType: "string" },
+            value: { bsonType: "string" }
+          }
+        }
+      }
+    }
+  }
+};
+
+const userValidator = {
+  $jsonSchema: {
+    bsonType: "object",
+    required: ["name", "email", "passwordHash", "role"],
+    properties: {
+      name: { bsonType: "string" },
+      email: { bsonType: "string" },
+      passwordHash: { bsonType: "string" },
+      role: { bsonType: "string" }
+    }
+  }
+};
+
+const cartValidator = {
+  $jsonSchema: {
+    bsonType: "object",
+    required: ["userId", "items"],
+    properties: {
+      userId: { bsonType: "objectId" },
+      items: {
+        bsonType: "array",
+        items: {
+          bsonType: "object",
+          required: ["productId", "quantity"],
+          properties: {
+            productId: { bsonType: "objectId" },
+            quantity: { bsonType: "int", minimum: 1 }
+          }
+        }
+      }
+    }
+  }
+};
+
+const orderValidator = {
+  $jsonSchema: {
+    bsonType: "object",
+    required: ["customerId", "items", "totalAmount", "status", "orderDate"],
+    properties: {
+      customerId: { bsonType: "objectId" },
+      items: {
+        bsonType: "array",
+        minItems: 1,
+        items: {
+          bsonType: "object",
+          required: ["productId", "nameAtPurchase", "priceAtPurchase", "qty"],
+          properties: {
+            productId: { bsonType: "objectId" },
+            nameAtPurchase: { bsonType: "string" },
+            priceAtPurchase: { bsonType: "number", minimum: 0 },
+            qty: { bsonType: "int", minimum: 1 }
+          }
+        }
+      },
+      totalAmount: { bsonType: "number", minimum: 0 },
+      status: { bsonType: "string" },
+      orderDate: { bsonType: "date" }
+    }
+  }
+};
+
+const reviewValidator = {
+  $jsonSchema: {
+    bsonType: "object",
+    required: ["productId", "userId", "rating"],
+    properties: {
+      productId: { bsonType: "objectId" },
+      userId: { bsonType: "objectId" },
+      rating: { bsonType: "int", minimum: 1, maximum: 5 },
+      comment: { bsonType: "string" }
+    }
+  }
+};
+
+const recommendationValidator = {
+  $jsonSchema: {
+    bsonType: "object",
+    required: ["productId", "relatedProducts", "computedAt"],
+    properties: {
+      productId: { bsonType: "objectId" },
+      relatedProducts: {
+        bsonType: "array",
+        maxItems: 5,
+        items: {
+          bsonType: "object",
+          required: ["productId", "score"],
+          properties: {
+            productId: { bsonType: "objectId" },
+            score: { bsonType: "number" }
+          }
+        }
+      },
+      computedAt: { bsonType: "date" }
+    }
+  }
+};
+
+// ==========================================
+// 2. Collection Initialization Logic
+// ==========================================
+
+const collectionsToInit = [
+  { name: 'products', validator: productValidator },
+  { name: 'users', validator: userValidator },
+  { name: 'carts', validator: cartValidator },
+  { name: 'orders', validator: orderValidator },
+  { name: 'reviews', validator: reviewValidator },
+  { name: 'recommendations', validator: recommendationValidator }
+];
+
+async function initializeDatabase() {
+  try {
+    console.log("Connecting to Atlas...");
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log("Connected successfully.");
+
+    const db = mongoose.connection.db;
+    
+    // Fetch all existing collections
+    const existingCollections = await db.listCollections().toArray();
+    const existingNames = existingCollections.map(c => c.name);
+
+    for (const coll of collectionsToInit) {
+      if (existingNames.includes(coll.name)) {
+        // Use collMod to apply/update the validator on an existing collection
+        await db.command({ collMod: coll.name, validator: coll.validator });
+        console.log(`✅ Updated existing collection with $jsonSchema: ${coll.name}`);
+      } else {
+        // Create collection brand new with the validator
+        await db.createCollection(coll.name, { validator: coll.validator });
+        console.log(`✅ Created new collection with $jsonSchema: ${coll.name}`);
+      }
+    }
+  } catch (error) {
+    console.error("❌ Database Initialization Error:", error);
+  } finally {
+    await mongoose.disconnect();
+    console.log("Disconnected from Atlas.");
+  }
+}
+
+initializeDatabase();
+
+```
+
+**Line-by-Line Breakdown:**
+- `const db = mongoose.connection.db;` → Bypasses Mongoose to talk directly to the native MongoDB driver.
+- `const collections = await db.listCollections().toArray();` → Checks if the collections exist yet.
+- `await db.command({ collMod: 'products', validator: { $jsonSchema: { ... } } });` → If the collection exists, it forcibly modifies its strict rules.
+- `await db.createCollection('products', { validator: { $jsonSchema: { ... } } });` → If it doesn't exist, it builds it with the rules attached.
+- `bsonType: "number"` vs `bsonType: "int"` → Explicitly locks data types at the hardware level. A float cannot be saved as an int.
+- **Why do this?** Mongoose can be bypassed by Python scripts or manual database edits. `$jsonSchema` guarantees that no matter how someone connects to the cluster, the database will violently reject corrupted data.
+
+### 41.10 server/scripts/testValidation.js (Firewall Penetration Testing)
+
+```javascript
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+const mongoose = require('mongoose');
+
+async function testValidation() {
+  try {
+    console.log("Connecting to Atlas...");
+    // Connect directly using mongoose connection (bypassing Mongoose Models)
+    await mongoose.connect(process.env.MONGODB_URI);
+    const db = mongoose.connection.db;
+    console.log("Connected successfully.\n");
+
+    const dummyId = new mongoose.Types.ObjectId();
+
+    // =========================================
+    // TEST 1: Valid Write
+    // =========================================
+    console.log("--- TEST 1: Valid Document Insertion ---");
+    try {
+      await db.collection('products').insertOne({
+        name: "Test Secure Keyboard",
+        price: 150,
+        stock: 20,
+        category: "Peripherals",
+        attributes: [{ key: "Switch", value: "Mechanical" }]
+      });
+      console.log("✅ PASSED: Valid Product successfully inserted into MongoDB.");
+    } catch (err) {
+      console.error("❌ FAILED: Valid Product insertion rejected.", err.message);
+    }
+
+    // =========================================
+    // TEST 2: Invalid Write (Negative Price)
+    // =========================================
+    console.log("\n--- TEST 2: Invalid Document (Negative Price) ---");
+    try {
+      await db.collection('products').insertOne({
+        name: "Hacked Keyboard",
+        price: -50, // Deliberate failure: Price minimum is 0
+        stock: 20,
+        category: "Peripherals"
+      });
+      console.error("❌ FAILED: DB allowed the negative price insertion! Firewall failed.");
+    } catch (err) {
+      if (err.code === 121) {
+        console.log("✅ PASSED: MongoDB natively REJECTED the negative price (Error 121: DocumentValidationFailure).");
+      } else {
+        console.error("❌ FAILED: Rejected, but for an unexpected reason:", err.message);
+      }
+    }
+
+    // =========================================
+    // TEST 3: Invalid Write (Missing Required Field)
+    // =========================================
+    console.log("\n--- TEST 3: Invalid Document (Missing Role in User) ---");
+    try {
+      await db.collection('users').insertOne({
+        name: "Ghost User",
+        email: "ghost@example.com",
+        passwordHash: "12345"
+        // Missing 'role'
+      });
+      console.error("❌ FAILED: DB allowed the user insertion without a role! Firewall failed.");
+    } catch (err) {
+      if (err.code === 121) {
+        console.log("✅ PASSED: MongoDB natively REJECTED the missing 'role' field (Error 121).");
+      } else {
+        console.error("❌ FAILED: Rejected, but for an unexpected reason:", err.message);
+      }
+    }
+
+    // =========================================
+    // CLEANUP
+    // =========================================
+    await db.collection('products').deleteMany({ name: "Test Secure Keyboard" });
+    console.log("\nCleanup complete.");
+
+  } catch (error) {
+    console.error("\n❌ Fatal Test Error:", error);
+  } finally {
+    await mongoose.disconnect();
+    console.log("Disconnected from Atlas.");
+  }
+}
+
+testValidation();
+
+```
+
+**Line-by-Line Breakdown:**
+- `await db.collection('products').insertOne(...)` → Attempts to write directly to Atlas, deliberately bypassing Mongoose's safety nets.
+- `catch(e) { if (e.code === 121) { ... } }` → `121` is the native MongoDB error code for a `DocumentValidationFailure`. We specifically catch this to prove our firewall successfully blocked the malicious payload (e.g., negative stock).
+
+### 41.11 server/seed/seedProducts.js (Automated Catalog Seeding)
+
+```javascript
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+const mongoose = require('mongoose');
+const Product = require('../models/Product');
+
+const seedProducts = [
+  // Electronics
+  {
+    name: "Urban X-Pro Laptop",
+    description: "High-performance laptop for professionals",
+    price: 1299,
+    stock: 25,
+    category: "Electronics",
+    attributes: [
+      { key: "processor", value: "Intel Core i7" },
+      { key: "ram", value: "16GB" },
+      { key: "storage", value: "512GB SSD" },
+      { key: "display", value: "15.6 inch 4K" }
+    ]
+  },
+  {
+    name: "Quantum Noise-Cancelling Headphones",
+    description: "Industry-leading wireless headphones",
+    price: 299,
+    stock: 50,
+    category: "Electronics",
+    attributes: [
+      { key: "connectivity", value: "Bluetooth 5.0" },
+      { key: "batteryLife", value: "30 hours" },
+      { key: "color", value: "Matte Black" }
+    ]
+  },
+  {
+    name: "NextGen Smartphone Ultra",
+    description: "Flagship smartphone with an incredible camera",
+    price: 999,
+    stock: 120,
+    category: "Electronics",
+    attributes: [
+      { key: "processor", value: "Snapdragon 8 Gen 2" },
+      { key: "storage", value: "256GB" },
+      { key: "display", value: "6.7 inch OLED" },
+      { key: "connectivity", value: "5G" }
+    ]
+  },
+  {
+    name: "Echo Smart Speaker",
+    description: "Voice-controlled smart home hub",
+    price: 99,
+    stock: 200,
+    category: "Electronics",
+    attributes: [
+      { key: "connectivity", value: "Wi-Fi" },
+      { key: "color", value: "Charcoal" }
+    ]
+  },
+  {
+    name: "Vision 4K Action Camera",
+    description: "Waterproof rugged action camera",
+    price: 199,
+    stock: 45,
+    category: "Electronics",
+    attributes: [
+      { key: "storage", value: "MicroSD up to 256GB" },
+      { key: "connectivity", value: "Wi-Fi, Bluetooth" }
+    ]
+  },
+  {
+    name: "Titan Mechanical Keyboard",
+    description: "RGB mechanical gaming keyboard",
+    price: 149,
+    stock: 75,
+    category: "Electronics",
+    attributes: [
+      { key: "switch", value: "Cherry MX Red" },
+      { key: "connectivity", value: "Wired USB-C" }
+    ]
+  },
+
+  // Apparel
+  {
+    name: "Classic Denim Jacket",
+    description: "Timeless blue denim jacket for everyday wear",
+    price: 59,
+    stock: 80,
+    category: "Apparel",
+    attributes: [
+      { key: "size", value: "M" },
+      { key: "color", value: "Blue" },
+      { key: "material", value: "100% Cotton" },
+      { key: "fit", value: "Regular" }
+    ]
+  },
+  {
+    name: "Athletic Performance Tee",
+    description: "Moisture-wicking workout t-shirt",
+    price: 25,
+    stock: 150,
+    category: "Apparel",
+    attributes: [
+      { key: "size", value: "L" },
+      { key: "color", value: "Black" },
+      { key: "material", value: "Polyester Blend" },
+      { key: "fit", value: "Slim" }
+    ]
+  },
+  {
+    name: "Urban Chino Pants",
+    description: "Comfortable and stylish chinos",
+    price: 45,
+    stock: 100,
+    category: "Apparel",
+    attributes: [
+      { key: "size", value: "32x32" },
+      { key: "color", value: "Khaki" },
+      { key: "fit", value: "Straight" }
+    ]
+  },
+  {
+    name: "Winter Wool Coat",
+    description: "Warm and elegant coat for winter",
+    price: 120,
+    stock: 30,
+    category: "Apparel",
+    attributes: [
+      { key: "size", value: "L" },
+      { key: "color", value: "Charcoal" },
+      { key: "material", value: "Wool Blend" }
+    ]
+  },
+  {
+    name: "Floral Summer Dress",
+    description: "Lightweight dress with a floral pattern",
+    price: 35,
+    stock: 60,
+    category: "Apparel",
+    attributes: [
+      { key: "size", value: "S" },
+      { key: "pattern", value: "Floral" },
+      { key: "material", value: "Viscose" }
+    ]
+  },
+  {
+    name: "Running Sneakers",
+    description: "Lightweight and breathable sneakers",
+    price: 85,
+    stock: 90,
+    category: "Apparel",
+    attributes: [
+      { key: "size", value: "10 US" },
+      { key: "color", value: "Neon Green" },
+      { key: "material", value: "Mesh" }
+    ]
+  },
+
+  // Groceries
+  {
+    name: "Organic Whole Milk",
+    description: "Fresh organic whole milk from pasture-raised cows",
+    price: 4,
+    stock: 200,
+    category: "Groceries",
+    attributes: [
+      { key: "weight", value: "1 Gallon" },
+      { key: "organic", value: "Yes" },
+      { key: "shelfLife", value: "14 days" },
+      { key: "packaging", value: "Plastic Jug" }
+    ]
+  },
+  {
+    name: "Artisan Sourdough Bread",
+    description: "Freshly baked sourdough loaf",
+    price: 6,
+    stock: 40,
+    category: "Groceries",
+    attributes: [
+      { key: "weight", value: "16 oz" },
+      { key: "organic", value: "No" },
+      { key: "flavor", value: "Sourdough" }
+    ]
+  },
+  {
+    name: "Premium Arabica Coffee Beans",
+    description: "Whole bean medium roast coffee",
+    price: 14,
+    stock: 150,
+    category: "Groceries",
+    attributes: [
+      { key: "weight", value: "12 oz" },
+      { key: "flavor", value: "Medium Roast" },
+      { key: "packaging", value: "Resealable Bag" }
+    ]
+  },
+  {
+    name: "Extra Virgin Olive Oil",
+    description: "Cold-pressed extra virgin olive oil",
+    price: 18,
+    stock: 75,
+    category: "Groceries",
+    attributes: [
+      { key: "weight", value: "750 ml" },
+      { key: "organic", value: "Yes" },
+      { key: "packaging", value: "Glass Bottle" }
+    ]
+  },
+  {
+    name: "Fresh Honeycrisp Apples",
+    description: "Crisp and sweet organic apples",
+    price: 5,
+    stock: 300,
+    category: "Groceries",
+    attributes: [
+      { key: "weight", value: "3 lbs" },
+      { key: "organic", value: "Yes" }
+    ]
+  },
+  {
+    name: "Free-Range Eggs",
+    description: "Dozen large brown eggs",
+    price: 6,
+    stock: 120,
+    category: "Groceries",
+    attributes: [
+      { key: "packaging", value: "Cardboard Carton" },
+      { key: "organic", value: "Yes" },
+      { key: "shelfLife", value: "30 days" }
+    ]
+  }
+];
+
+async function seedDatabase() {
+  try {
+    console.log("Connecting to Atlas...");
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log("Connected successfully.");
+
+    // Clear ONLY the products collection to avoid nuking other domain data
+    console.log("Clearing existing products...");
+    await Product.deleteMany({});
+
+    // Insert new products
+    console.log(`Inserting ${seedProducts.length} sample products...`);
+    const inserted = await Product.insertMany(seedProducts);
+
+    console.log(`✅ Success! ${inserted.length} products inserted.`);
+  } catch (err) {
+    console.error("❌ Seeding Error:", err.message);
+  } finally {
+    await mongoose.disconnect();
+    console.log("Disconnected from Atlas.");
+  }
+}
+
+seedDatabase();
+
+```
+
+**Line-by-Line Breakdown:**
+- `const seedProducts = [ ... ]` → A hardcoded array of 18 realistic items spanning 3 diverse categories to stress-test the Attribute Pattern.
+- `await Product.deleteMany({});` → **Idempotency.** Wipes the catalog completely before inserting. This guarantees we can run the script 500 times without ever duplicating data.
+- `await Product.insertMany(seedProducts);` → Executes a highly efficient bulk-insert operation to Atlas, rather than sending 18 individual `save()` commands, minimizing network round-trips.
