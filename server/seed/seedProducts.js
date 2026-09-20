@@ -236,11 +236,11 @@ async function seedDatabase() {
     // Clear ONLY the products collection to avoid nuking other domain data
     console.log("Clearing existing products...");
     await Product.deleteMany({});
-    
+
     // Insert new products
     console.log(`Inserting ${seedProducts.length} sample products...`);
     const inserted = await Product.insertMany(seedProducts);
-    
+
     console.log(`✅ Success! ${inserted.length} products inserted.`);
   } catch (err) {
     console.error("❌ Seeding Error:", err.message);
