@@ -1642,3 +1642,223 @@ seedDatabase();
 - `const seedProducts = [ ... ]` → A hardcoded array of 18 realistic items spanning 3 diverse categories to stress-test the Attribute Pattern.
 - `await Product.deleteMany({});` → **Idempotency.** Wipes the catalog completely before inserting. This guarantees we can run the script 500 times without ever duplicating data.
 - `await Product.insertMany(seedProducts);` → Executes a highly efficient bulk-insert operation to Atlas, rather than sending 18 individual `save()` commands, minimizing network round-trips.
+## 💻 41. Complete Day-1 Source Code Archive & Line-by-Line Breakdown
+
+This section preserves the exact source code written during Day 1 and breaks down the logic line-by-line. This ensures that every architectural decision, validation hook, and connection sequence is fully understood.
+
+### 📄 1. `server/server.js` (The Application Entry Point)
+```javascript
+const express = require('express');
+const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+const path = require('path');
+
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(express.json());
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'success', message: 'UrbanKart backend is running successfully.', timestamp: new Date().toISOString() });
+});
+
+const productRoutes = require('./routes/productRoutes');
+app.use('/api/products', productRoutes);
+
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+  console.error('FATAL ERROR: MONGODB_URI is not defined in the environment variables.');
+  process.exit(1);
+}
+
+mongoose.connect(MONGODB_URI)
+  .then(() => {
+    console.log('MongoDB connected via Mongoose');
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error('ERROR: Failed to connect to MongoDB.', error.message);
+    process.exit(1);
+  });
+```
+**Line-by-Line Explanation:**
+*   **Lines 1-4:** We import external libraries. `express` builds the server, `mongoose` talks to the database, `dotenv` loads secrets, and `path` helps resolve exact file locations across different operating systems.
+*   **Line 6:** Loads our `.env` file from the parent directory into `process.env`. Without this, our app has no passwords and cannot connect to Atlas.
+*   **Lines 8-9:** Instantiates the Express app and determines which port to listen on. It defaults to 5000 if not provided by the cloud provider.
+*   **Line 11:** `app.use(express.json())` is a global middleware. It automatically intercepts incoming requests, parses raw JSON text into a usable JavaScript object, and assigns it to `req.body`.
+*   **Lines 13-15:** Mounts the `/api/health` diagnostic route. This allows AWS/GCP load balancers to ping the server to verify it hasn't crashed.
+*   **Lines 17-18:** Imports the isolated product routes file and explicitly mounts it to the `/api/products` prefix.
+*   **Lines 20-25:** The "Fail-Fast" check. If `MONGODB_URI` is missing, we violently kill the application (`process.exit(1)`). It is better to crash immediately than to run silently in a broken state.
+*   **Lines 27-37:** The connection block. We instruct Mongoose to connect. The `.then()` block only executes if the connection is perfectly established. **Crucially**, we nest `app.listen(PORT)` *inside* the `.then()`. This guarantees the server will never accept an HTTP request until the database is ready to process it.
+
+---
+
+### 📄 2. `server/routes/productRoutes.js` (The Catalog API)
+```javascript
+const express = require('express');
+const router = express.Router();
+const Product = require('../models/Product');
+
+router.get('/', async (req, res) => {
+  try {
+    const products = await Product.find({});
+    res.status(200).json(products);
+  } catch (error) {
+    console.error('Error fetching products:', error.message);
+    res.status(500).json({ status: 'error', message: 'Failed to retrieve products from the database.' });
+  }
+});
+
+module.exports = router;
+```
+**Line-by-Line Explanation:**
+*   **Line 1-2:** Imports Express and creates an isolated `Router` instance. This prevents cluttering `server.js` with hundreds of routes.
+*   **Line 3:** Imports our Mongoose `Product` model, giving this file the power to read the `products` collection.
+*   **Line 5:** Defines a `GET` route on `/` (which becomes `/api/products` when mounted in `server.js`). It is marked `async` because database operations take time over the network.
+*   **Line 6:** Opens a `try/catch` block. This is mandatory in async routes. If Atlas times out, Node.js will crash without a catch block.
+*   **Line 7:** `await Product.find({})`. This translates to a MongoDB query: "Fetch every document in the products collection." The Node event loop is unblocked while waiting.
+*   **Line 8:** Sends a `200 OK` HTTP status and uses `.json()` to serialize the BSON data array into a web-readable JSON response.
+*   **Lines 9-12:** If the database crashes, we log the exact error to the server console (for developers), but we send a generic, safe `500` error to the client to avoid leaking database internals to hackers.
+*   **Line 15:** Exports the router so `server.js` can `require()` it.
+
+---
+
+### 📄 3. `server/models/Product.js` (The Core Catalog Schema)
+```javascript
+const mongoose = require('mongoose');
+
+const attributeSchema = new mongoose.Schema({
+  key: { type: String, required: true, trim: true },
+  value: { type: String, required: true, trim: true }
+}, { _id: false });
+
+const productSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  description: { type: String },
+  price: { type: Number, required: true, min: 0 },
+  stock: { type: Number, required: true, min: 0, default: 0, validate: { validator: Number.isInteger } },
+  category: { type: String, required: true, trim: true },
+  attributes: [attributeSchema]
+}, { timestamps: true });
+
+module.exports = mongoose.model('Product', productSchema);
+```
+**Line-by-Line Explanation:**
+*   **Lines 3-6:** Defines the `attributeSchema` for the Attribute Pattern. `_id: false` explicitly tells Mongoose NOT to generate an ObjectId for these tiny subdocuments, saving massive amounts of RAM and disk space. `trim: true` automatically removes accidental spaces (e.g., " RAM " becomes "RAM").
+*   **Lines 8-15:** Defines the main `productSchema`. 
+*   **Line 11:** `price` must be a Number, and `min: 0` ensures we cannot pay users to take our items.
+*   **Line 12:** `stock` has strict integer validation. `validate: { validator: Number.isInteger }` intercepts Mongoose's default behavior (which allows floating-point decimals like `1.5`) and forces absolute integers. This matches our underlying `$jsonSchema` firewall.
+*   **Line 14:** `attributes: [attributeSchema]` creates an embedded array of our flexible key-value pairs, resolving the polymorphic catalog problem (laptops vs shirts).
+*   **Line 15:** `{ timestamps: true }` automatically commands Mongoose to generate and update `createdAt` and `updatedAt` fields seamlessly.
+*   **Line 17:** Compiles the structural blueprint into an active `Model` named 'Product' and exports it. Mongoose automatically pluralizes the name to locate the `products` collection in MongoDB.
+
+---
+
+### 📄 4. `server/scripts/initDb.js` (The Absolute Database Firewall)
+```javascript
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+const mongoose = require('mongoose');
+
+async function initializeDatabase() {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    const db = mongoose.connection.db;
+
+    await db.command({
+      collMod: 'products',
+      validator: {
+        $jsonSchema: {
+          bsonType: 'object',
+          required: ['name', 'price', 'stock', 'category'],
+          properties: {
+            name: { bsonType: 'string' },
+            price: { bsonType: 'number', minimum: 0 },
+            stock: { bsonType: 'int', minimum: 0 },
+            category: { bsonType: 'string' },
+            attributes: {
+              bsonType: 'array',
+              items: {
+                bsonType: 'object',
+                required: ['key', 'value'],
+                properties: {
+                  key: { bsonType: 'string' },
+                  value: { bsonType: 'string' }
+                }
+              }
+            }
+          }
+        }
+      },
+      validationLevel: 'strict',
+      validationAction: 'error'
+    });
+    console.log('✅ Validation rules applied.');
+  } finally {
+    await mongoose.disconnect();
+  }
+}
+```
+**Line-by-Line Explanation:**
+*   **Lines 1-2:** Loads secrets and Mongoose. Note the complex `path.resolve` to guarantee the script finds `.env` regardless of where the terminal executes it from.
+*   **Line 6-7:** Connects to Atlas and accesses the native MongoDB driver (`db`), completely bypassing Mongoose.
+*   **Lines 9-10:** We use the native MongoDB `collMod` (Collection Modify) command to target the existing `products` collection directly in Atlas.
+*   **Lines 11-14:** We define the `$jsonSchema`. We explicitly mandate that `name`, `price`, `stock`, and `category` MUST exist. If a script tries to write a product without a price, Atlas violently rejects the write operation at the metal level.
+*   **Line 17:** `stock: { bsonType: 'int', minimum: 0 }`. This is stricter than Mongoose. It requires a 32-bit BSON integer (not a JS Float).
+*   **Lines 20-30:** We recursively define the exact structure of the `attributes` array. It must be an array of objects, and every object MUST have a string `key` and a string `value`.
+*   **Lines 34-35:** `validationLevel: 'strict'` (all inserts and updates are checked) and `validationAction: 'error'` (the database throws Error 121 and aborts the write, rather than just logging a warning).
+
+---
+
+### 📄 5. `server/seed/seedProducts.js` (Development Catalog Automation)
+```javascript
+const mongoose = require('mongoose');
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+const Product = require('../models/Product');
+
+const seedProducts = [
+  {
+    name: "Urban X-Pro Laptop",
+    description: "High-performance laptop for professionals",
+    price: 1299,
+    stock: 25,
+    category: "Electronics",
+    attributes: [
+      { key: "processor", value: "Intel Core i7" },
+      { key: "ram", value: "16GB" }
+    ]
+  },
+  // ... (17 more products representing Apparel and Groceries)
+];
+
+async function seedDatabase() {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    
+    console.log("Clearing existing products...");
+    await Product.deleteMany({});
+
+    console.log(`Inserting ${seedProducts.length} sample products...`);
+    const inserted = await Product.insertMany(seedProducts);
+    
+    console.log(`✅ Success! ${inserted.length} products inserted.`);
+  } catch (err) {
+    console.error("❌ Seeding Error:", err.message);
+  } finally {
+    mongoose.disconnect();
+  }
+}
+
+seedDatabase();
+```
+**Line-by-Line Explanation:**
+*   **Lines 1-3:** Loads Mongoose, secrets, and our `Product` ODM.
+*   **Lines 5-18:** Defines the raw JSON payload. Notice how `attributes` perfectly utilizes the Attribute Pattern to describe laptop-specific RAM and Processor, preventing us from adding empty columns to our database.
+*   **Line 22:** Connects securely to the remote Atlas instance.
+*   **Lines 24-25:** `await Product.deleteMany({})` is the key to **Idempotency**. This line clears the `products` collection completely before seeding. This guarantees that running the script 100 times results in exactly 18 products, not 1,800 duplicated products. It ensures a highly predictable development environment.
+*   **Line 28:** `Product.insertMany(seedProducts)` leverages Mongoose's bulk-insert capability, pushing all 18 objects across the network to Atlas in a single, lightning-fast batch operation rather than 18 separate writes.
+*   **Lines 31-35:** Proper error handling and graceful database disconnection. Failing to disconnect will cause the Node process to hang infinitely in the terminal.
