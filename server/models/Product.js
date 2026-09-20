@@ -32,7 +32,11 @@ const productSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 0, // Prevents negative inventory (e.g., selling more than we have).
-    default: 0 // Safely defaults to 'Out of Stock' rather than causing null pointer errors if omitted.
+    default: 0, // Safely defaults to 'Out of Stock' rather than causing null pointer errors if omitted.
+    validate: {
+      validator: Number.isInteger,
+      message: 'Stock must be an integer.'
+    }
   },
   category: {
     type: String,
