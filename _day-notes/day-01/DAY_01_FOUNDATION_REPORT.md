@@ -1865,7 +1865,69 @@ seedDatabase();
 
 ---
 
-## 🎯 42. Final Day 1 Retrospective & Conclusion
+## 💻 42. Command-Line Interface (CLI) & Execution Cheat Sheet
+
+This section documents every critical terminal command utilized during Day 1. Understanding these commands is essential for controlling the environment, managing dependencies, testing the API, and versioning the code.
+
+### 📦 Node Package Manager (NPM) Commands
+NPM is how we pull open-source code from the internet into our project.
+
+*   `npm init -y`
+    *   **Usage:** Run inside the `server/` directory.
+    *   **Explanation:** Initializes a brand new Node.js project. The `-y` flag skips the questionnaire and automatically generates the `package.json` file, which tracks all our project dependencies.
+*   `npm install express mongoose dotenv`
+    *   **Usage:** Run inside the `server/` directory.
+    *   **Explanation:** Downloads our three core Day 1 dependencies from the npm registry and places them in the `node_modules` folder. It also updates `package.json` to record the exact versions installed.
+
+### 🐙 Git & GitHub Commands
+Version control commands used to chronologically track and secure our codebase.
+
+*   `git init`
+    *   **Explanation:** Transforms a normal folder into a Git repository, allowing it to track file changes.
+*   `git status`
+    *   **Explanation:** The most important Git command. It tells you exactly what files have been modified, which are untracked, and what is currently staged for a commit.
+*   `git diff --check`
+    *   **Explanation:** A strict formatting check. It scans the codebase for syntax marker errors, conflict markers, and trailing whitespace, ensuring professional code quality before committing.
+*   `git diff` or `git diff <filename>`
+    *   **Explanation:** Shows the exact line-by-line changes (additions in green, deletions in red) made since the last commit.
+*   `git add <filename>` or `git add .`
+    *   **Explanation:** Moves modified files into the "Staging Area". This tells Git, "I want these specific files to be included in my next commit."
+*   `git commit -m "feat(api): description"`
+    *   **Explanation:** Cryptographically seals the staged files into a permanent historical snapshot. We strictly used **Conventional Commits** (e.g., `feat:`, `fix:`, `style:`, `docs:`) to create a readable, automated changelog.
+*   `git push origin main`
+    *   **Explanation:** Uploads our local commits to the remote GitHub server (`origin`) on the `main` branch, ensuring our work is backed up in the cloud.
+*   `git log --oneline`
+    *   **Explanation:** Displays a condensed, highly readable history of all our past commits and their unique hashes.
+
+### 🗄️ Database Script Execution
+Commands used to run our one-off infrastructure scripts natively via Node.js.
+
+*   `node scripts/initDb.js`
+    *   **Usage:** Run inside the `server/` directory.
+    *   **Explanation:** Executes our database firewall script. It connects directly to Atlas and applies our strict `$jsonSchema` BSON validation rules natively to the collections.
+*   `node scripts/testValidation.js`
+    *   **Usage:** Run inside the `server/` directory.
+    *   **Explanation:** Runs our automated test script that intentionally tries to inject illegal data (e.g., negative stock) to prove that the Atlas database firewall natively rejects it with Error 121.
+*   `node seed/seedProducts.js`
+    *   **Usage:** Run inside the `server/` directory.
+    *   **Explanation:** Automates the ingestion of our development catalog. It safely drops the existing `products` collection and bulk-inserts our 18 meticulously crafted test products (Electronics, Apparel, Groceries).
+
+### 🌐 Server & API Testing Commands
+Commands used to start the Express web server and test the HTTP routes.
+
+*   `node server.js`
+    *   **Usage:** Run inside the `server/` directory.
+    *   **Explanation:** Boots up the Express application. The server attempts to connect to MongoDB first, and if successful, binds to `http://localhost:5000` to listen for incoming client traffic.
+*   `Invoke-RestMethod -Uri http://localhost:5000/api/health`
+    *   **Usage:** Run in a separate PowerShell terminal while the server is running.
+    *   **Explanation:** Simulates a client (like a browser or load balancer) pinging our diagnostic endpoint. It expects a JSON response confirming the server is alive.
+*   `Invoke-RestMethod -Uri http://localhost:5000/api/products`
+    *   **Usage:** Run in a separate PowerShell terminal while the server is running.
+    *   **Explanation:** Tests our foundational Day 1 endpoint. It triggers Express to query Mongoose, which queries Atlas, returning all 18 seeded products as a massive JSON payload over port 5000.
+
+---
+
+## 🎯 43. Final Day 1 Retrospective & Conclusion
 
 As we conclude Day 1, it is essential to step back and observe the entire landscape of what we have engineered. We did not merely write a web server; we forged an industrial-grade **NoSQL Foundation**.
 
