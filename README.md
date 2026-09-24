@@ -48,25 +48,25 @@ UrbanKart resolves these architectural challenges natively using MongoDB's docum
 
 ```mermaid
 flowchart TD
-    subgraph Layer 1: Client Tier
+    subgraph Layer1 [Layer 1: Client Tier]
         User([Customer / Client])
         Admin([Administrator])
     end
 
-    subgraph Layer 2: API & Application (Express.js)
+    subgraph Layer2 [Layer 2: API and Application]
         API[REST API Gateway]
         Middleware[Express Middleware & Error Handling]
         Logic[Business Logic / Controllers]
         ODM[Mongoose ODM Validation]
     end
 
-    subgraph Layer 3: Domain Workflows
+    subgraph Layer3 [Layer 3: Domain Workflows]
         ProductWF[Product Management]
         CartWF[Cart Operations 📅]
         OrderWF[Checkout & Orders 📅]
     end
 
-    subgraph Layer 4: MongoDB Data Layer & Collections
+    subgraph Layer4 [Layer 4: MongoDB Data Layer and Collections]
         products[(products)]
         users[(users)]
         carts[(carts)]
