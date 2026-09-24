@@ -1,6 +1,6 @@
 <div align="center">
 
-![UrbanKart Header](https://capsule-render.vercel.app/api?type=waving&color=C21500,FFC500,11998E&height=220&section=header&text=%F0%9F%9B%92%20UrbanKart&fontSize=75&fontAlignY=38&animation=twinkling&v=5)
+![UrbanKart Header](https://capsule-render.vercel.app/api?type=waving&color=0:C21500,50:FFC500,100:11998E&height=220&section=header&text=%F0%9F%9B%92%20UrbanKart&fontSize=75&fontAlignY=38&animation=twinkling&v=6)
 
 **Intelligent NoSQL E-Commerce Platform**
 
@@ -316,7 +316,7 @@ This project is licensed under the MIT License. See the `LICENSE` file for full 
 
 <div align="center">
 
-![UrbanKart Footer](https://capsule-render.vercel.app/api?type=waving&color=C21500,FFC500,11998E&height=120&section=footer&v=5)
+![UrbanKart Footer](https://capsule-render.vercel.app/api?type=waving&color=0:C21500,50:FFC500,100:11998E&height=120&section=footer&v=6)
 
 <b>UrbanKart</b><br>
 <i>Engineered for CSE494 Intelligent NoSQL Databases.</i>
