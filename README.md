@@ -34,16 +34,16 @@ By leveraging MongoDB's flexible document model, UrbanKart handles these complex
 
 ## 🎯 4. Project Objectives
 
-| Objective | What UrbanKart Demonstrates |
+| Business Goal | How UrbanKart Achieves This |
 | :--- | :--- |
-| **Document Data Modeling** | Eliminating ORM mapping overhead by aligning JSON objects directly with DB storage. |
-| **Embedding vs Referencing** | Strategically denormalizing bounded data (cart items) and normalizing unbounded data (reviews). |
-| **Attribute Pattern** | Handling infinite product specification variations without schema alterations. |
-| **Schema Validation** | Implementing dual-layer defense (Node.js application layer + Database metal layer). |
-| **RESTful Architecture** | Creating decoupled, stateless Express APIs. |
-| **Historical Snapshotting** | Ensuring financial immutability for processed orders. |
-| **Materialized Views** | Precomputing heavy recommendation algorithms for O(1) retrieval speeds. |
-| **Engineering Discipline** | Enforcing strict Git workflows, conventional commits, and deterministic database seeding. |
+| **Flexible Product Catalog** | Storing products as flexible "documents" instead of rigid tables, allowing electronics and clothing to exist side-by-side easily. |
+| **Lightning-Fast Carts** | Grouping cart items directly with the user's profile to make adding and removing items practically instant. |
+| **Infinite Customization** | Using a smart design pattern so sellers can add any product feature (like 'Bluetooth' or 'Fabric type') without rewriting the website's code. |
+| **Bulletproof Data Security** | Double-checking every piece of data (like making sure prices are never negative) at both the website level and the deep database level. |
+| **Seamless App Integration** | Building a clean, standard communication system (API) so future mobile apps and web browsers can both talk to the store easily. |
+| **Permanent Digital Receipts** | Taking a permanent snapshot of the exact name and price of an item at checkout so past receipts never change, even if the store updates its catalog. |
+| **Instant Recommendations** | Calculating "Similar Products" overnight and saving the results, so the website loads instantly for shoppers the next day. |
+| **Professional Engineering** | Following strict, industry-standard rules for writing code, ensuring the website is stable, secure, and easily maintainable by future developers. |
 
 ## 🏗️ 5. High-Level Architecture
 
