@@ -23,13 +23,14 @@ UrbanKart is a modern e-commerce platform built as a comprehensive academic demo
 It heavily utilizes **MongoDB** as a flexible, document-oriented data store and **Mongoose** as the application-level ODM (Object Data Modeling) layer. The platform showcases how to correctly handle highly polymorphic product catalogs, volatile shopping carts, financially immutable order histories, and computationally heavy recommendation systems within a distributed NoSQL environment.
 
 ## ❓ 3. Problem Statement
-Traditional relational databases (SQL) enforce rigid, tabular normalization. However, e-commerce data is inherently hierarchical, diverse, and fluid.
-*   **Polymorphic Entities:** A laptop requires "RAM" and "Processor" specs, while a shirt requires "Size" and "Material". Modeling this in SQL requires either massive sparse tables (hundreds of empty columns) or the slow Entity-Attribute-Value (EAV) anti-pattern requiring multiple joins.
-*   **Immutability:** When a user views an old receipt, the product name and price must exactly match the moment of purchase, regardless of subsequent database updates.
-*   **Read vs. Write Optimization:** Carts experience high write-churn, while product catalogs require extreme read-optimization.
-*   **Analytics Overhead:** Computing "related products" dynamically on every page load crushes database performance.
+Building a modern online store is complicated. Older database systems (like SQL) force data into strict, rigid tables that don't easily handle the messy reality of e-commerce. UrbanKart uses NoSQL to solve four major real-world business problems:
 
-UrbanKart resolves these architectural challenges natively using MongoDB's document model, exploiting embedding, referencing, the Attribute Pattern, and the Snapshot Pattern.
+*   **The "Every Product is Different" Problem (Product Variety):** A laptop has "RAM" and a "Processor", but a t-shirt has a "Size" and "Color". Trying to cram completely different products into the exact same rigid database table creates messy, slow systems. UrbanKart uses flexible documents to let every product have its own unique traits effortlessly.
+*   **The "Changing Price" Problem (Receipt Accuracy):** If a customer buys a shirt for $20 today, and the store raises the price to $25 tomorrow, the customer's past receipt must still permanently say $20. UrbanKart guarantees this financial accuracy by taking a permanent "snapshot" of the item at the exact moment of purchase.
+*   **The "Shopping Cart" Problem (Website Speed):** Customers add, remove, and update items in their carts constantly, often without ever checking out. This creates massive stress on a database. UrbanKart stores cart data in a way that handles thousands of rapid clicks without slowing down the rest of the website.
+*   **The "Smart Recommendations" Problem (Analytics):** Suggesting "Products you might also like" requires heavy math that can make the whole website freeze if calculated on the fly. UrbanKart solves this by pre-calculating these recommendations behind the scenes and storing them for instant loading.
+
+By leveraging MongoDB's flexible document model, UrbanKart handles these complex business requirements seamlessly without sacrificing speed or stability.
 
 ## 🎯 4. Project Objectives
 
