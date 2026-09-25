@@ -18,9 +18,9 @@ UrbanKart is a comprehensive academic backend engineered to demonstrate advanced
 ---
 
 ## 📖 2. Overview
-UrbanKart is a modern e-commerce platform built as a comprehensive academic demonstration of NoSQL database principles. Unlike basic CRUD tutorials, UrbanKart is purposefully architected to conquer complex relational bottlenecks typically found in online retail. 
+UrbanKart is a modern, high-performance online storefront designed to showcase how next-generation databases solve the biggest headaches in the e-commerce industry.
 
-It heavily utilizes **MongoDB** as a flexible, document-oriented data store and **Mongoose** as the application-level ODM (Object Data Modeling) layer. The platform showcases how to correctly handle highly polymorphic product catalogs, volatile shopping carts, financially immutable order histories, and computationally heavy recommendation systems within a distributed NoSQL environment.
+Instead of using older database systems that force data into rigid tables, UrbanKart is powered by **MongoDB**—a flexible system that stores data much like real-world documents. This allows the platform to effortlessly handle vastly different types of products in the same catalog, manage thousands of active shopping carts without crashing, lock in past order receipts permanently, and generate smart 'products you might like' recommendations without slowing down the website.
 
 ## ❓ 3. Problem Statement
 Building a modern online store is complicated. Older database systems (like SQL) force data into strict, rigid tables that don't easily handle the messy reality of e-commerce. UrbanKart uses NoSQL to solve four major real-world business problems:
