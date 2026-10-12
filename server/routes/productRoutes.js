@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const Product = require('../models/Product');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, loadCurrentUser, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 const MAX_PAGE_SIZE = 100;
@@ -106,7 +106,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', authenticate, requireAdmin, async (req, res) => {
+router.post('/', authenticate, loadCurrentUser, requireAdmin, async (req, res) => {
   const validationMessage = validateProductPayload(req.body);
   if (validationMessage) return res.status(400).json({ status: 'error', message: validationMessage });
   try {
@@ -120,7 +120,7 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-router.patch('/:id', authenticate, requireAdmin, async (req, res) => {
+router.patch('/:id', authenticate, loadCurrentUser, requireAdmin, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ status: 'error', message: 'Product ID is invalid.' });
   }
@@ -140,7 +140,7 @@ router.patch('/:id', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
+router.delete('/:id', authenticate, loadCurrentUser, requireAdmin, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ status: 'error', message: 'Product ID is invalid.' });
   }

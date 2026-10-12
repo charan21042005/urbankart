@@ -1,5 +1,6 @@
 const express = require('express');
 const authRoutes = require('./routes/authRoutes');
+const cartRoutes = require('./routes/cartRoutes');
 const productRoutes = require('./routes/productRoutes');
 
 const app = express();
@@ -14,6 +15,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/cart', cartRoutes);
 app.use('/api/products', productRoutes);
 
 // Keep malformed JSON and request-size errors in the API's JSON response format.

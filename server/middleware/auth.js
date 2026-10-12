@@ -50,23 +50,28 @@ function authenticate(req, res, next) {
   }
 }
 
-async function requireAdmin(req, res, next) {
+async function loadCurrentUser(req, res, next) {
   if (!req.auth?.userId) {
     return res.status(401).json({ status: 'error', message: 'Authentication required.' });
   }
 
   try {
-    // The database is the source of truth so deleted/demoted accounts lose
-    // mutation access as soon as this check observes the account change.
     const user = await User.findById(req.auth.userId).select('role');
-    if (user?.role !== 'admin') {
-      return res.status(403).json({ status: 'error', message: 'Administrator access required.' });
+    if (!user) {
+      return res.status(401).json({ status: 'error', message: 'Account is unavailable.' });
     }
+    req.currentUser = user;
     return next();
   } catch {
-    // Fail closed when current authorization state cannot be verified.
-    return res.status(503).json({ status: 'error', message: 'Authorization is temporarily unavailable.' });
+    return res.status(503).json({ status: 'error', message: 'Account verification is temporarily unavailable.' });
   }
 }
 
-module.exports = { getJwtSecret, getJwtExpiresIn, signUserToken, authenticate, requireAdmin };
+function requireAdmin(req, res, next) {
+  if (req.currentUser?.role !== 'admin') {
+    return res.status(403).json({ status: 'error', message: 'Administrator access required.' });
+  }
+  return next();
+}
+
+module.exports = { getJwtSecret, getJwtExpiresIn, signUserToken, authenticate, loadCurrentUser, requireAdmin };
