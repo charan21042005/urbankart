@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
+const mongoose = require('mongoose');
 const {
   SafetyError,
   validatePreflight,
@@ -7,7 +8,7 @@ const {
   classifyTopology,
   assessTransactionVersion
 } = require('../scripts/databaseSafety');
-const { readDay1SeedNames } = require('../scripts/auditDatabaseReadOnly');
+const { readDay1SeedNames, connectReadOnly } = require('../scripts/auditDatabaseReadOnly');
 const { requireTransactionTopology } = require('../scripts/checkoutIntegrationCommon');
 
 const dbName = 'urbankart_test_isolated';
@@ -33,6 +34,47 @@ test('database preflight rejects missing confirmation before attempting a connec
     mode: 'audit', argv: [], env: validEnv(), connect: async () => { connects += 1; }
   }), SafetyError);
   assert.equal(connects, 0);
+});
+
+test('audit preflight failures never invoke mongoose.connect', async () => {
+  const originalConnect = mongoose.connect;
+  let calls = 0;
+  mongoose.connect = async () => { calls += 1; };
+  try {
+    const failures = [
+      { argv: [], env: validEnv() },
+      { argv: auditArgs, env: validEnv({ URBANKART_EXPECTED_DB_NAME: '' }) },
+      { argv: auditArgs, env: validEnv({ URBANKART_EXPECTED_DB_NAME: 'different_db' }) },
+      { argv: auditArgs, env: validEnv({ URBANKART_DB_ENV: '' }) },
+      { argv: auditArgs, env: validEnv({ MONGODB_URI: 'mongodb://localhost:27017/' }) }
+    ];
+    for (const { argv, env } of failures) {
+      await assert.rejects(connectAfterPreflight({
+        mode: 'audit', argv, env,
+        connect: (targetUri) => mongoose.connect(targetUri)
+      }), SafetyError);
+    }
+    assert.equal(calls, 0);
+  } finally {
+    mongoose.connect = originalConnect;
+  }
+});
+
+test('read-only audit connection disables Mongoose collection and index creation', async () => {
+  const originalConnect = mongoose.connect;
+  let capturedOptions;
+  mongoose.connect = async (_uri, options) => {
+    capturedOptions = options;
+    return mongoose;
+  };
+  try {
+    await connectReadOnly('mongodb://offline.invalid/ignored');
+    assert.equal(capturedOptions.autoCreate, false);
+    assert.equal(capturedOptions.autoIndex, false);
+    assert.equal(capturedOptions.serverSelectionTimeoutMS, 10_000);
+  } finally {
+    mongoose.connect = originalConnect;
+  }
 });
 
 test('database preflight rejects missing, unknown, or conflicting expected database names offline', async () => {

@@ -9,6 +9,17 @@ const safety = require('./databaseSafety');
 
 const models = [Product, User, Cart, Order];
 
+function connectReadOnly(uri) {
+  // Model compilation records schema indexes, and Mongoose can otherwise create
+  // collections/indexes automatically when the connection opens. Disable both
+  // behaviors explicitly; the audit only inspects existing database metadata/data.
+  return mongoose.connect(uri, {
+    serverSelectionTimeoutMS: 10_000,
+    autoCreate: false,
+    autoIndex: false
+  });
+}
+
 function readDay1SeedNames() {
   const seedPath = path.resolve(__dirname, '../seed/seedProducts.js');
   const source = fs.readFileSync(seedPath, 'utf8');
@@ -22,7 +33,7 @@ async function run() {
   try {
     const target = await safety.connectAfterPreflight({
       mode: 'audit',
-      connect: (uri) => mongoose.connect(uri, { serverSelectionTimeoutMS: 10_000 })
+      connect: connectReadOnly
     });
     connected = true;
     const db = mongoose.connection.db;
@@ -112,4 +123,4 @@ async function run() {
 }
 
 if (require.main === module) run();
-module.exports = { readDay1SeedNames, run };
+module.exports = { readDay1SeedNames, connectReadOnly, run };
