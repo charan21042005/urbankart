@@ -46,3 +46,6 @@ lerna-debug.log*
 
 # Optional eslint cache
 .eslintcache
+
+# Raw product datasets are kept out of Git history
+server/seed/data/
