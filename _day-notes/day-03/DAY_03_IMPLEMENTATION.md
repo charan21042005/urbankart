@@ -49,6 +49,16 @@ The guard protects one stock update. Multi-product stock decrements, order creat
 
 The local checkout database target is not safely identifiable: root `.env` has a MongoDB URI with no explicit database path or `dbName` option. No connection was attempted. Therefore database name, collection counts, indexes, validators, presence/count of the original 18 Day 1 products, current-role query behavior against MongoDB, and transaction support are **not verified**. No seed/import/write operation ran. The raw catalog CSV remains Git-ignored; its Kaggle license and currency are unverified.
 
+### Final verification attempt (2026-10-12)
+
+The current checkpoint is `c1c964e4ede1b39bbb18333e0279291d590818c7` on `main`, synchronized with `origin/main` before this documentation update. The working tree was clean at the start of this verification. Application startup loads root `.env` and calls `mongoose.connect(MONGODB_URI)` without a `dbName` override. A metadata-only local configuration check confirmed that a MongoDB URI is present but has no database path, no URI `dbName` option, and no separate database-name setting. No URI or credentials were printed, and MongoDB was not contacted.
+
+The target also has not been explicitly confirmed as isolated from production/shared data. Therefore all read-only audit and real integration phases stopped at the safety gate: no database name/counts, collection/index/validator details, Day 1 product count, topology, rollback behavior, or 20-request checkout outcomes are available. No integration-test script was added because there is no safely allowlisted test database. No database write, seed, or importer write mode ran.
+
+To unblock safely, choose the isolated development/test database and confirm its cluster/environment in the local database provider dashboard. Set the root `.env` `MONGODB_URI` to that exact database by including its intended database name in the URI path (the app has no separate `dbName` option), or update the app configuration through a reviewed change to pass an explicit `dbName`. Verify locally that the selected database name and cluster correspond to the disposable non-production target. Do not paste the URI or credentials into chat. A database name containing `dev` or `test` alone is not proof of isolation.
+
+The code review reconfirmed that cart reads and writes are scoped by the authenticated user ID; checkout derives prices from current Product records, guards each stock decrement with `stock >= qty`, and uses one session for stock/order/cart operations. `finally` ends the session. Product removal or stock reduction before checkout causes the guarded update to fail. These are code-level observations only: concurrent cart edits can race, and neither real rollback nor database concurrency is verified. The Order schema still has no persistent idempotency key, so delayed replay after a new cart is populated is not deduplicated.
+
 The checkout contains no canonical SRS/roadmap/Day 3 guide. The source traceability basis is limited to local `README.md`, Day 1/Day 2 notes, and the actual model and route code. The DOCX companion report records the same limits.
 
 ## Local checks recorded
