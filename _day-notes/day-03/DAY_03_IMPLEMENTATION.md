@@ -45,7 +45,7 @@ The guard protects one stock update. Multi-product stock decrements, order creat
 
 ## Tests and verification status
 
-`npm test` currently contains 22 tests and uses in-process HTTP plus mocked Mongoose methods for API/database behavior. Tests include user-scoped cart lookup, rejection of invalid product IDs and missing products, and checkout behavior. The simultaneous-checkout test serializes callbacks in a fake transaction harness. It verifies route logic under that simulation; it is not a MongoDB concurrency test and does not prove real transaction rollback, retry behavior, write conflicts, or Atlas topology support.
+`npm test` contains offline/in-process tests. The existing cart/API tests use mocked Mongoose methods for database behavior. The simultaneous-checkout test serializes callbacks in a fake transaction harness; it is not a MongoDB concurrency test and does not prove real rollback, retry behavior, write conflicts, or Atlas topology support. Database safety tests exercise preflight failures using injected connection functions and verify that failed checks do not call them.
 
 The local checkout database target is not safely identifiable: root `.env` has a MongoDB URI with no explicit database path or `dbName` option. No connection was attempted. Therefore database name, collection counts, indexes, validators, presence/count of the original 18 Day 1 products, current-role query behavior against MongoDB, and transaction support are **not verified**. No seed/import/write operation ran. The raw catalog CSV remains Git-ignored; its Kaggle license and currency are unverified.
 
@@ -53,7 +53,28 @@ The local checkout database target is not safely identifiable: root `.env` has a
 
 The current checkpoint is `c1c964e4ede1b39bbb18333e0279291d590818c7` on `main`, synchronized with `origin/main` before this documentation update. The working tree was clean at the start of this verification. Application startup loads root `.env` and calls `mongoose.connect(MONGODB_URI)` without a `dbName` override. A metadata-only local configuration check confirmed that a MongoDB URI is present but has no database path, no URI `dbName` option, and no separate database-name setting. No URI or credentials were printed, and MongoDB was not contacted.
 
-The target also has not been explicitly confirmed as isolated from production/shared data. Therefore all read-only audit and real integration phases stopped at the safety gate: no database name/counts, collection/index/validator details, Day 1 product count, topology, rollback behavior, or 20-request checkout outcomes are available. No integration-test script was added because there is no safely allowlisted test database. No database write, seed, or importer write mode ran.
+The target also has not been explicitly confirmed as isolated from production/shared data. Therefore no database name/counts, collection/index/validator details, Day 1 product count, actual topology, rollback behavior, or 20-request checkout outcomes are available. Safety tooling and real integration-test entry points have now been added, but no integration run was allowed past local preflight. No database write, seed, or importer write mode ran.
+
+### Offline safety tooling (2026-10-12)
+
+Added `server/scripts/databaseSafety.js`, `auditDatabaseReadOnly.js`, `checkoutIntegrationCommon.js`, `testCheckoutRollback.js`, and `testCheckoutConcurrency.js`, plus package scripts. `.env.example` documents the safety-gate settings as blank by default. The audit requires `--confirm-isolated-db <name>`, `URBANKART_EXPECTED_DB_NAME`, a matching explicit database path in `MONGODB_URI` (and rejects a conflicting URI `dbName` option), and `URBANKART_DB_ENV=isolated-development`. The environment assertion is a human statement, not proof of Atlas project/cluster isolation. The test entry points additionally require a matching `URBANKART_TEST_DB_NAME` and `URBANKART_TXN_TOPOLOGY_CONFIRMED=replicaSet|sharded` before connecting; after connecting they verify MongoDB `hello` against that assertion before creating fixtures.
+
+Audit command (not run against MongoDB):
+
+```powershell
+npm run audit:database -- --confirm-isolated-db <database-name>
+```
+
+Rollback and concurrency commands (not run against MongoDB):
+
+```powershell
+npm run test:checkout:rollback -- --confirm-test-db <database-name>
+npm run test:checkout:concurrency -- --confirm-test-db <database-name>
+```
+
+The audit only lists existing collections and reads counts, validators, indexes, schema paths, `hello`, and server build/version metadata. It reports topology-level support separately from the MongoDB version requirement; this still does not prove transaction permissions or successful commits. It compares Day 1 seed names parsed statically from `seedProducts.js` without importing/executing that destructive script; matches are by name only because the Product schema has no seed provenance marker. Integration scripts use unique disposable fixtures and clean only captured user/cart/product IDs and orders tied to their unique test users. The rollback script injects an order-write failure after the real stock update, then checks stock, order, cart, and session cleanup. The concurrency script sends 20 bounded HTTP checkouts and verifies 201/409 outcomes and persisted state.
+
+Offline verification: `npm test` includes the new fail-closed preflight tests. Running each real command with a placeholder confirmation while the expected database settings were absent returned a refusal before connection. The audit and integration scripts themselves have **not** connected or run against MongoDB; topology, rollback, persisted 20-request concurrency, and cleanup behavior remain **not verified**. The test scripts require an Atlas topology attestation before connecting because topology cannot be known without a handshake; they independently check `hello` before fixture writes.
 
 To unblock safely, choose the isolated development/test database and confirm its cluster/environment in the local database provider dashboard. Set the root `.env` `MONGODB_URI` to that exact database by including its intended database name in the URI path (the app has no separate `dbName` option), or update the app configuration through a reviewed change to pass an explicit `dbName`. Verify locally that the selected database name and cluster correspond to the disposable non-production target. Do not paste the URI or credentials into chat. A database name containing `dev` or `test` alone is not proof of isolation.
 
@@ -63,9 +84,9 @@ The checkout contains no canonical SRS/roadmap/Day 3 guide. The source traceabil
 
 ## Local checks recorded
 
-- `npm test`: 22 passed, 0 failed (mocked/local tests; no DB connection).
+- `npm test`: 34 passed, 0 failed (offline preflight plus mocked/local API tests; no DB connection).
 - `npm run import:products -- --dry-run` from `server/`: 20,000 rows; 19,159 valid; 841 rejected; 0 writes.
-- JavaScript syntax checks: all 18 server JavaScript files passed.
+- JavaScript syntax checks: all 24 server JavaScript files passed.
 - Dependency and lockfile consistency commands passed from `server/`.
 - `git diff --check` passed.
 - `.env`, `server/.env`, and `server/seed/data/flipkart_com-ecommerce_sample.csv` are ignored and untracked.
@@ -75,8 +96,9 @@ The checkout contains no canonical SRS/roadmap/Day 3 guide. The source traceabil
 - [x] Implement authenticated cart routes and transaction-based checkout flow.
 - [x] Keep client prices out of checkout calculations and preserve order snapshots.
 - [x] Add mock coverage for stock conflict, checkout failure, auth regressions, and a simulated competing checkout.
+- [x] Add fail-closed audit and real integration-test tools with offline preflight coverage.
 - [x] Record limits without claiming live integration.
-- [ ] Configure the intended isolated development database name locally and confirm it is non-production; do not send credentials or URI in chat.
+- [ ] Confirm the Atlas project/cluster is isolated, then configure expected/test database names and human environment/topology assertions locally; do not share credentials or URI.
 - [ ] Run a read-only audit of collections, counts, indexes, validators, and Day 1 products only after the database identity is unambiguous.
 - [ ] Verify replica-set/sharded transaction support, then run rollback and 20-request final-unit checkout integration tests against an isolated test database.
 - [ ] Review canonical SRS/roadmap requirements when available; decide if durable checkout idempotency is required.
