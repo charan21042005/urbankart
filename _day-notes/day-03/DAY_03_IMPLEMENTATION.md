@@ -111,3 +111,12 @@ The checkout contains no canonical SRS/roadmap/Day 3 guide. The source traceabil
 - **Why use a conditional stock update?** The quantity check and decrement happen in one database write. If stock is below the requested quantity, the filter matches no document and the checkout fails instead of creating negative stock.
 - **Why use a transaction?** Stock, order, and cart are separate documents/collections. A transaction makes the multi-document checkout succeed or fail together, but only on a topology that supports transactions.
 - **What remains unproven?** Mock tests cannot establish live topology, indexes, database validators, transaction rollback, or real concurrent outcomes. Those require the explicitly identified isolated database and integration tests.
+
+### Verification addendum (2026-10-12)
+
+- Starting repository state: `main` at `2342c871912bcf35c533be7052dec6f64ec51daf`, matching `origin/main`; the tracked working tree was clean before this addendum.
+- Offline checks completed: `npm test` passed 34 tests; `node --check` passed for 24 JavaScript files; `npm ls --depth=0` passed; `git diff --check` passed.
+- Configuration was inspected without printing credentials. The URI uses the configured application account and expected cluster, but selects no database path or `dbName`; the expected database and isolation gate settings are unset. The safety tools refuse before connecting. No MongoDB connection, read-only audit, or live checkout integration test was run.
+- The JWT signing secret pasted into the conversation was rotated in the ignored local `.env`; existing JWTs signed with the previous secret are invalid. The exposed Atlas database password still requires manual rotation in Atlas, followed by a local `.env` update. No credentials were included in this report.
+- `.env` and the raw dataset path remain Git-ignored. No database data was read or changed, and no seed/import command ran.
+- Next: rotate the Atlas application-user password in Atlas, update it locally without sharing it, confirm the Atlas project and cluster are isolated and disposable, and configure one explicit database path plus the local safety gate values. Then run the read-only audit first. Run real checkout tests only after reviewing the audit and confirming transaction-capable topology.
