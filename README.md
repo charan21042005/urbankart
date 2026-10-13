@@ -109,11 +109,12 @@ The flow of data through UrbanKart prioritizes separation of concerns and databa
 ### Product Retrieval Flow (✅ Implemented)
 `Client` → `GET /api/products` → `Product.find({})` → `MongoDB products collection` → `JSON Array Response`
 
-### Authentication Flow (📅 Planned)
-`Client` → `POST /api/login` → `User Model` → `Verify bcrypt Hash` → `Generate JWT` → `Protected Route Access`
+### Authentication Flow (Backend Implemented; Live Integration Depends on Database Configuration)
+`Client` → `POST /api/auth/login` → `User Model` → `Verify bcrypt Hash` → `Generate JWT` → `Protected Route Access`
 
-### Checkout Flow (📅 Planned)
-`Client Cart` → `POST /api/checkout` → `Validate Stock` → `Create Order (Snapshot Pattern)` → `Atomic Inventory Deduction` → `Clear Cart`
+### Checkout Flow (Backend Route Implemented; Client Checkout Not Implemented)
+`Client Cart` → `POST /api/cart/checkout` → `Validate Stock and Read Current Prices` → `Create Order (Snapshot Pattern)` → `Transactional Inventory Deduction` → `Clear Cart`
+The route is verified from source; live checkout behavior is not implied. See [the client API contract and Stage E review](client/README.md).
 
 ### Recommendation Flow (📅 Planned logic, Schema ✅ Implemented)
 `Offline Job` → `Compute Similarity` → `Overwrite recommendations collection` → `Client queries O(1) Materialized View`
