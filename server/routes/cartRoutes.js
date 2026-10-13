@@ -144,7 +144,7 @@ router.post('/checkout', async (req, res) => {
         const product = await Product.findOneAndUpdate(
           { _id: item.productId, stock: { $gte: item.quantity } },
           { $inc: { stock: -item.quantity } },
-          { new: true, session }
+          { returnDocument: 'after', session }
         );
         if (!product) {
           throw new CheckoutError(409, 'A cart product is unavailable or has insufficient stock.');
