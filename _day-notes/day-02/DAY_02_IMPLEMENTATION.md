@@ -86,6 +86,10 @@ The catalog import did **not** run. There are no before/after counts or inserted
 
 The Day 3 cart/order schemas already exist in `server/models/Cart.js` and `server/models/Order.js`; preserve them unless the approved project specifications require a change. Before checkout implementation, confirm the MongoDB deployment supports transactions (for example, Atlas replica-set/sharded topology), and define atomic stock reservation/decrement, rollback on order failure, and concurrent checkout tests. No Day 3 code was added during this closure audit.
 
+## Days 1–4 completion update (2026-10-13)
+
+The previous closure statements above describe the earlier checkpoint and are superseded by the task-owned local verification. The actual CSV dry run found 20,000 rows, 19,159 valid unique normalized products, 841 rejected, 78 invalid prices, 763 duplicate products, and 11,249 unmatched/value-only specification pairs. The import was run with the explicit synthetic stock default `0` into disposable local MongoDB only; direct count confirmed 19,159 imported records. The dataset has no explicit currency or stock field, and the Kaggle page did not expose a verifiable license. No import was made to Atlas; the temporary local database was removed after verification. Product admin CRUD and local registration/login were also exercised. Profile read/update exists, while account deletion remains undefined. See [`DAYS_01_04_COMPLETION.md`](../day-01-04/DAYS_01_04_COMPLETION.md).
+
 ## Day 3 remains
 
 Cart management, checkout, atomic stock decrement/transactions, order snapshots, and their concurrency tests remain for Day 3.

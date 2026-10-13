@@ -104,7 +104,7 @@ flowchart TD
 The flow of data through UrbanKart prioritizes separation of concerns and database safety.
 
 **General HTTP Flow:**
-`Client` → `Express API` → `Middleware` → `Mongoose Model` → `MongoDB Atlas` → `API Response`
+`React client` → `Express API` → `authentication/validation` → `Mongoose` → `configured MongoDB database` → `JSON response`
 
 ### Product Retrieval Flow (✅ Implemented)
 `Client` → `GET /api/products` → `Product.find({})` → `MongoDB products collection` → `JSON Array Response`
@@ -155,7 +155,7 @@ Real-time recommendation calculations are computationally heavy. We use a dedica
 ## 🛡️ 9. Validation & Data Integrity
 UrbanKart enforces data integrity using a **Defense in Depth** dual-layer strategy:
 1.  **Mongoose Validation (Application Layer):** Provides excellent developer experience, synchronous type casting, and friendly JSON HTTP error messages.
-2.  **$jsonSchema Validation (Database Metal Layer):** A strict, un-bypassable firewall configured directly inside MongoDB Atlas. 
+2.  **$jsonSchema Validation (database layer):** Strict validators are installed by an explicitly gated local-database initializer. Atlas validators were not changed or verified by the Days 1–4 local run.
 
 **Strict Validation Examples Implemented:**
 *   **Product:** `price >= 0` and `stock >= 0` (integer enforced).
@@ -187,7 +187,7 @@ Instead of calculating similarity dynamically, an offline process computes relat
 | Layer | Technology | Responsibility |
 | :--- | :--- | :--- |
 | **Backend Framework** | Node.js + Express.js | High-throughput, non-blocking HTTP API |
-| **Database** | MongoDB Atlas | Managed NoSQL document store |
+| **Database** | MongoDB | A local replica set was used for the latest integration verification; Atlas is a separately configured environment |
 | **ODM / Abstraction** | Mongoose | Application-level validation and modeling |
 | **Language** | JavaScript | Unified full-stack language |
 | **Configuration** | dotenv | Secure runtime environment variables |
@@ -199,37 +199,40 @@ Instead of calculating similarity dynamically, an offline process computes relat
 | :--- | :--- | :--- |
 | **M1 – Database Foundation** | Schemas, Validation Firewall, Seeding | ✅ Complete |
 | **M2 – API Architecture** | Express setup, Routing, Health checks | ✅ Complete |
-| **M3 – Authentication** | JWT, bcrypt, Identity Management | 📅 Planned |
-| **M4 – E-Commerce Engine** | Cart, Checkout, Transactions | 📅 Planned |
-| **M5 – Client Application** | React UI Frontend | 📅 Planned |
+| **M3 - Authentication** | JWT, bcrypt, current-role authorization, customer account closure | Implemented |
+| **M4 - E-Commerce Engine** | Cart, transactional checkout, idempotency and reconciliation | Implemented and locally verified |
+| **M5 - Client Application** | API-connected React storefront, cart and checkout UI | Implemented; fresh browser acceptance remains blocked |
 
 ## 🗺️ 15. Project Roadmap
-*   **Phase 1: Foundation & Database Modeling (✅ Current)**
-*   **Phase 2:** Core Product APIs & Testing
-*   **Phase 3:** Authentication & Security Layer
-*   **Phase 4:** Cart State & Checkout Logic
-*   **Phase 5:** Transactions & Concurrency Control
-*   **Phase 6:** React Storefront Development
-*   **Phase 7:** Admin Dashboard & Analytics
-*   **Phase 8:** Intelligent Recommendations
+*   **Phase 1: Foundation & Database Modeling - Complete**
+*   **Phase 2: Core Product APIs and dataset import - Complete; source license remains unverified**
+*   **Phase 3: Authentication and Security - Implemented, including customer self-closure**
+*   **Phase 4: Cart, Checkout, Transactions and Idempotency - Local replica-set scenarios verified**
+*   **Phase 5: Transactions and Concurrency Control - Local replica-set scenarios verified**
+*   **Phase 6: React Storefront - Implemented; fresh browser acceptance pending**
+*   **Phase 7: Admin Dashboard and Analytics (later work)**
+*   **Phase 8: Intelligent Recommendations (Day 5)**
 
 ## 📊 16. Current Implementation Status
 
 | Component | Status |
 | :--- | :--- |
 | GitHub Repository & Environment | ✅ Complete |
-| MongoDB Atlas Connection | ✅ Complete |
+| MongoDB connection | Local replica-set integration verified; Atlas was not contacted by the latest completion run |
 | Mongoose Models | ✅ Product, User, Cart, Order, CheckoutOperation, Review, Recommendation |
-| Database `$jsonSchema` Validation | ✅ Complete |
-| Deterministic Seed Automation | ✅ Complete (18 products) |
+| Database `$jsonSchema` Validation | ✅ Seven local validators initialized and seven invalid documents rejected |
+| Catalog import | ✅ 19,159 unique valid products in a separate loopback-only local development database under `%LOCALAPPDATA%`; database files are outside Git/OneDrive |
 | GET `/api/products` Endpoint | ✅ Complete |
 | GET `/api/health` Endpoint | ✅ Complete |
-| POST/PUT/DELETE Product CRUD | Implemented with current-role admin authorization |
+| POST/PATCH/DELETE Product CRUD | Implemented with current-role admin authorization |
 | JWT Authentication | Implemented; browser token remains memory-only |
 | Cart & Checkout APIs | Implemented with user-scoped idempotency and reconciliation |
-| React Frontend | Implemented with API-connected checkout |
+| React Frontend | Implemented; fresh browser visual and purchase journey verification is pending |
+| Customer account management | Customer self-closure and admin-only customer CRUD are implemented; admin CRUD operations are covered by offline tests. Admin roles remain provisioned out of band. |
+| Dataset license and redistribution | Unverified; do not redistribute the raw CSV until rights are clarified |
+| Fresh browser end-to-end QA | Pending; Chrome, Edge, and Brave could not render in this environment; no fresh screenshots |
 | Atomic Inventory Updates | Transaction-backed; local replica-set scenarios verified |
-| Aggregation Analytics | 📅 Planned |
+| Reviews API/UI, recommendation generation, analytics | 📅 Later roadmap work; not part of the verified Days 1–4 storefront |
 
 ## 📁 17. Repository Structure
 
@@ -272,13 +275,13 @@ The `_day-notes/` directory acts as a permanent, academic learning record. It ch
 | **Materialized View** | Precomputed recommendation structures for O(1) reads. | ✅ Implemented |
 | **Schema Validation** | Dual-layer validation (Mongoose + DB Metal level). | ✅ Implemented |
 | **REST APIs** | Stateless Express.js routing architecture. | ✅ Implemented |
-| **Authentication** | Cryptographic identity verification. | 📅 Planned |
-| **Atomic Updates** | Avoiding race conditions during inventory deduction. | 📅 Planned |
-| **Transactions** | ACID multi-document consistency. | 📅 Planned |
+| **Authentication** | bcrypt hashing, JWT, current-role checks for admin mutations. | ✅ Implemented and locally exercised |
+| **Atomic Updates** | Conditional stock reservation tested against last-unit contention. | ✅ Implemented and locally verified |
+| **Transactions** | Order, checkout operation, stock, and cart commit together. | ✅ Verified on local replica-set scenarios |
 | **Aggregation** | Data pipelines for reporting and logic. | 📅 Planned |
 
 ## ✅ 20. Day 1 / Foundation Milestone
-The Day 1 milestone successfully established the absolute core of the backend infrastructure. We verified the Node environment, connected securely to MongoDB Atlas, and engineered all six Mongoose models. We successfully locked down the database natively using `$jsonSchema` validators and proved the firewall works via automated testing. Finally, we seeded the database with 18 realistic items using a deterministic, idempotent script and exposed this data via our first live REST endpoint (`GET /api/products`).
+The original Day 1 checkpoint used 18 development products. Current safety tools initialize validators only after an explicit local replica-set gate. In the Days 1–4 completion run, validators and negative checks were verified on a separate disposable local database; Atlas was not contacted, so no claim is made about Atlas validator state.
 
 ## ⚠️ 21. Scope & Limitations
 *   **Academic Nature:** UrbanKart is designed primarily as an educational demonstration of NoSQL modeling and is not intended as a drop-in replacement for production enterprise systems.
@@ -303,17 +306,23 @@ Beyond the current roadmap, potential future architectural extensions include:
     npm install
     ```
 3.  **Environment Setup:**
-    Create a `.env` file in the root `urbankart` directory based on `.env.example`. You must provide your own MongoDB Atlas Connection String.
-4.  **Seed the Database (Optional):**
-    ```bash
-    node scripts/initDb.js
-    node seed/seedProducts.js
+    Create the root `.env` from `.env.example`, then independently choose the intended database target. The server reads `MONGODB_URI` from this file. Never aim a seed/import operation at Atlas; initialization and import require an explicit, loopback-only local replica-set gate.
+4.  **Initialize a disposable local database** only after MongoDB is running locally and its `hello` output confirms the expected replica set:
+    ```powershell
+    $env:MONGODB_URI='mongodb://127.0.0.1:27017/urbankart_local?replicaSet=ukLocal'
+    $env:URBANKART_EXPECTED_DB_NAME='urbankart_local'
+    $env:URBANKART_DB_ENV='isolated-development'
+    $env:URBANKART_TXN_TOPOLOGY_CONFIRMED='replicaSet'
+    $env:URBANKART_TXN_REPLICA_SET_NAME='ukLocal'
+    npm run db:init:local -- --confirm-local-db urbankart_local
+    npm run test:db:validation -- --confirm-local-db urbankart_local
     ```
-5.  **Start the API Server:**
+    These are process-scoped examples, not a MongoDB server startup command. The Day 1 sample seed now also requires `--confirm-local-db <name>`, verifies all replica-set members are loopback, and upserts only deterministic sample IDs without clearing products.
+5.  **Start the API and client:**
     ```bash
     node server.js
     ```
-    The server will boot on port 5000. Verify by visiting `http://localhost:5000/api/health`.
+    The API defaults to port 5000. In another terminal run `cd ../client; npm install; npm run dev`. Vite proxies `/api` to loopback Express. Verify `http://127.0.0.1:5000/api/health` before using the client.
 
 ## 🧪 24. Stage G — Isolated local integration verification
 
@@ -327,9 +336,9 @@ The existing rollback test passed against a real replica set: stock returned fro
 
 Browser QA used an isolated temporary Chrome profile and CSS viewports 390×844, 768×1024, and 1440×1000. The home, product detail, login, registration, guest cart, `/checkout`, and not-found routes were inspected at all three sizes. Search/category filtering, UI registration, adding the synthetic product, and authenticated cart quantity updates were exercised. No horizontal overflow or browser runtime/console errors were observed. Keyboard focus reached the visible skip link, and reduced-motion emulation applied. Screenshots were saved outside the repository under `%TEMP%\urbankart-stageg-screenshots-20261013`.
 
-Checkout remains unavailable in the client. The backend has no persistent user-scoped idempotency key or authenticated order reconciliation/history endpoint. A successful response followed by a duplicate empty-cart request is not a general replay guarantee; after an ambiguous 503 or lost response, a client still cannot determine whether an order committed. Do not enable checkout or automatically retry uncertain submissions until that backend contract and its replica-set integration tests are implemented.
+At the historical Stage G baseline, checkout was unavailable in the client and did not yet have a persistent idempotency/reconciliation contract. Stage H below records the later implementation and its isolated replica-set verification.
 
-Offline verification also passed: client tests (37), production build, client dependency listing, server tests (44), and server dependency listing. The server unit tests use mocks and remain distinct from the live replica-set checks above.
+At the Stage G checkpoint, offline verification passed: client tests (37), production build, client dependency listing, server tests (44), and server dependency listing. Those mock-based unit tests were separate from the live replica-set checks above; current final-follow-up counts are recorded in the Days 1–4 completion report.
 
 ## Stage H — Idempotent checkout and order reconciliation
 
@@ -382,6 +391,12 @@ Stage H follow-up at baseline `81a0d588a8bbb04d0f91f5ddefca6bd860cb01cb` fixed t
 
 ## 25. License
 This project is licensed under the MIT License. See the `LICENSE` file for full details.
+
+## Current Days 1–4 Verification (2026-10-13)
+
+The detailed [Days 1–4 completion report](_day-notes/day-01-04/DAYS_01_04_COMPLETION.md) is the current evidence record and explicitly separates offline tests, disposable-local-MongoDB tests, live local HTTP checks, and browser QA. Earlier work verified idempotent checkout/reconciliation, rollback, and the 20-request stock race on a task-owned MongoDB 8.3.7 replica set. This follow-up created a separate loopback-only local development database under `%LOCALAPPDATA%` with 19,159 products and seven validators. Atlas and the existing `test` database were not contacted; the raw CSV remains Git-ignored and the local database is outside Git/OneDrive.
+
+The API and Vite proxy completed a direct HTTP storefront/cart/checkout sequence, including a persisted order and reconciliation. A prior isolated local HTTP check also verified customer admin CRUD and checkout through Vite/Express against synthetic local data, then the catalog was imported into a separate persistent loopback-only database. This final recheck initialized a distinct empty test database on the same verified loopback replica set and reran MongoDB validation, idempotency, rollback, and concurrency tests; the detailed report records its exact counts. Current offline tests pass (server 65/65, client 44/44), the client production build passes, dependency listings pass, syntax checks pass across 44 JavaScript files, and the importer dry run parsed 20,000 rows without writes. A fresh normal visible Chrome launch exited before rendering with GPU process exit `-1073741790` and `GPU process isn't usable`; no screenshot was captured. Previous Stage G/H screenshots are historical, not evidence for this diff. The roadmap and Day 1–3 guides were readable during the latest requirements recheck; the SRS and Day 4 guide remained locked and could not be independently reread. Days 1–4 remain **partially complete** pending browser QA, complete review of those two locked source documents, and dataset-license clarification.
 
 <div align="center">
 

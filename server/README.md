@@ -1,30 +1,135 @@
-<div align="center">
-  <h2>⚙️ UrbanKart Server (Backend)</h2>
-  <p><strong>Node.js & Express API for Intelligent NoSQL</strong></p>
-  <p>
-    <img src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
-    <img src="https://img.shields.io/badge/Express.js-404D59?style=for-the-badge" alt="Express.js" />
-    <img src="https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white" alt="MongoDB" />
-    <img src="https://img.shields.io/badge/Mongoose-880000?style=for-the-badge&logo=mongoose&logoColor=white" alt="Mongoose" />
-  </p>
-</div>
+# UrbanKart API
 
----
+Node.js, Express, Mongoose, and MongoDB backend for the UrbanKart CSE494 project. The root `.env` is loaded by `server.js`; never commit it or pass its contents to logs. Server startup disables Mongoose automatic collection and index creation. Use an explicit migration/initializer for schema changes.
 
-### 📝 Overview
-This directory contains the RESTful backend for the UrbanKart e-commerce platform. It is designed to act as the core data processing and business logic layer, demonstrating advanced MongoDB capabilities for CSE494.
+## Data model
 
-### 🏛️ Architecture & Structure
-The server follows a modular, Service-Oriented Architecture (SOA) pattern:
+The six SRS collections are `products`, `users`, `carts`, `orders`, `reviews`, and `recommendations`. Checkout adds the operational `checkoutoperations` collection for persistent, user-scoped idempotency. Product specifications preserve the existing Attribute Pattern `attributes: [{ key, value }]`. Cart items and order snapshots are embedded because they are bounded and read with their parent; user/product relationships are references. Reviews remain separate to avoid unbounded growth on Product. Recommendations are a materialized-view schema; generation and serving are later roadmap work.
 
-- **`/models`**: Mongoose schemas enforcing MongoDB Document Validation.
-- **`/controllers`**: Request handlers mapping HTTP routes to business logic.
-- **`/routes`**: Express routers defining the API endpoints.
-- **`/services`**: Core business logic (e.g., checkout process, recommendation engine).
-- **`/middleware`**: Reusable request interceptors (JWT Auth, Error Handling).
-- **`/config`**: Database and environment configurations.
+`scripts/initLocalDatabase.js` installs seven strict MongoDB `$jsonSchema` validators and declared indexes. It requires an explicit `--confirm-local-db <name>`, an exact URI path/database match, `URBANKART_DB_ENV=isolated-development`, a literal loopback `mongodb://` URI, an explicit replica-set name, and a live writable-primary `hello` check whose members are all loopback. `scripts/testDatabaseValidation.js` then attempts one invalid synthetic document per collection and requires MongoDB validation error 121. These checks do not alter Atlas.
 
-### 🚀 Upcoming Features
-- JWT-based authentication and role authorization.
-- Advanced querying with MongoDB Aggregation Pipelines.
-- Concurrency control for stock management using Transactions.
+## API
+
+| Method and path | Access | Purpose |
+| --- | --- | --- |
+| `GET /api/health` | Public | Process health |
+| `GET /api/products?page=&limit=&search=&category=&sort=` | Public | Text search, exact category filter, pagination, and sort; array response plus `X-Total-*` headers |
+| `GET /api/products/categories` | Public | Sorted categories observed in MongoDB |
+| `GET /api/products/:id` | Public | Product detail |
+| `POST /api/products` | Current database admin | Create whitelisted product fields |
+| `PATCH /api/products/:id` | Current database admin | Update whitelisted product fields |
+| `DELETE /api/products/:id` | Current database admin | Delete product |
+| `POST /api/auth/register` | Public | bcrypt password hash, customer role, JWT and public user response |
+| `POST /api/auth/login` | Public | Verify credentials and return JWT/public user |
+| `GET /api/users?page=&limit=` | Current database admin | Paginated customer list; password hashes are never selected or returned |
+| `POST /api/users` | Current database admin | Create a customer with a bcrypt-hashed password; role is always `customer` |
+| `GET /api/users/:id` | Current database admin | Read a customer's safe profile fields |
+| `PATCH /api/users/:id` | Current database admin | Update an active customer's name and/or email |
+| `DELETE /api/users/:id` | Current database admin | Anonymize and deactivate a customer while retaining order references |
+| `GET /api/users/me` | Signed in | Public profile fields only |
+| `PATCH /api/users/me` | Signed in | Update the profile name only |
+| `DELETE /api/users/me` | Signed-in customer | Anonymize and deactivate the caller; retained orders keep the user reference |
+| `GET /api/cart` | Signed in | Read the caller's populated cart |
+| `POST /api/cart/items` | Signed in | Add a product and bounded quantity |
+| `PATCH /api/cart/items/:productId` | Signed in | Set quantity |
+| `DELETE /api/cart/items/:productId` | Signed in | Remove an item |
+| `DELETE /api/cart` | Signed in | Clear the caller's cart |
+| `POST /api/cart/checkout` | Signed in | Transactional checkout; requires `Idempotency-Key` |
+| `GET /api/cart/checkout/:key` | Signed in | Reconcile only the caller's checkout result |
+
+Registration ignores client roles. Protected admin mutations load the current user role from MongoDB, so deleted or demoted admins lose access. Profile editing is limited to `name`. Customer self-closure replaces the name, email, and password hash with non-identifying tombstone values and marks the account inactive; existing order references remain intact. Inactive accounts cannot log in or use an old token. Administrator self-closure is rejected.
+
+Administrative user CRUD is limited to customer accounts. Admin routes never accept a role or `isActive` field; new accounts are always customers, and existing administrator provisioning remains a trusted out-of-band operation. Create responses and customer reads omit password hashes. Deletion anonymizes/deactivates instead of physically deleting so historical order references remain valid. Offline route tests cover current-role authorization, whitelisted fields, password hashing, and tombstone behavior; this does not replace live browser verification.
+
+## Safe local setup
+
+Install dependencies with `npm install`. Configure root `.env` with placeholders from `../.env.example` only after choosing the database. For local schema work, start a fresh disposable MongoDB replica set bound to `127.0.0.1`; independently verify its `hello` identity. In the same PowerShell process as the commands, configure process-scoped values (do not paste them into source control):
+
+```powershell
+$env:MONGODB_URI='mongodb://127.0.0.1:27017/urbankart_local?replicaSet=ukLocal'
+$env:URBANKART_EXPECTED_DB_NAME='urbankart_local'
+$env:URBANKART_DB_ENV='isolated-development'
+$env:URBANKART_TXN_TOPOLOGY_CONFIRMED='replicaSet'
+$env:URBANKART_TXN_REPLICA_SET_NAME='ukLocal'
+npm run db:init:local -- --confirm-local-db urbankart_local
+npm run test:db:validation -- --confirm-local-db urbankart_local
+```
+
+The process values override dotenv only for that shell/process. They are not evidence by themselves: the scripts also parse the URI and verify the connected local replica-set primary and every advertised host. Never run these write commands against Atlas or a shared database. The Day 1 sample seed is also local-gated and uses deterministic `$setOnInsert` upserts without clearing existing products:
+
+```powershell
+node seed/seedProducts.js --confirm-local-db urbankart_local
+```
+
+The CSV importer applies the same complete local-member gate before its bounded upserts.
+
+## Dataset import
+
+The local ignored file `seed/data/flipkart_com-ecommerce_sample.csv` is the PromptCloudHQ Flipkart Products dataset. The source page is <https://www.kaggle.com/datasets/PromptCloudHQ/flipkart-products>; the Kaggle page did not expose a verifiable license during this review, so redistribution rights remain unverified. The importer requires `uniq_id`, `product_name`, `product_category_tree`, and `discounted_price`; it maps specifications/brand to `{ key, value }`, uses deterministic IDs, validates rows, and writes bounded batches. The source has no stock or explicit currency field. A write therefore requires an explicit inventory policy such as `--stock-default 0` and does not add a currency field.
+
+```powershell
+npm run import:products -- --dry-run
+# Only for a separately confirmed disposable local database:
+npm run import:products -- --import --stock-default 0 --confirm-local-db urbankart_local
+```
+
+The latest local dry run parsed 20,000 rows: 19,159 valid unique normalized products, 841 rejected (78 invalid prices and 763 duplicate products among the counted rejection reasons), 2 repeated product IDs, no repeated `uniq_id`, and 11,249 specification pairs without a key/value mapping. The isolated import count was 19,159. It was performed only in a task-owned disposable local database that has since been removed; it is not a current persistent catalog count. Price values remain currency-unspecified.
+
+### Persistent local development catalog
+
+A separate local development catalog is stored outside the repository and OneDrive at `%LOCALAPPDATA%\UrbanKart\mongodb-day1-4-dev`. It uses replica set `ukLocalDev` on loopback port `27020`, database `urbankart_local_dev`, and currently contains 19,159 imported products. The importer assigned stock `0` because the source has no inventory field; the catalog is browseable but cannot support a purchase until a separate, clearly synthetic inventory policy is chosen. The Kaggle redistribution license remains unverified, so this copy stays local and must not be committed or redistributed.
+
+To start MongoDB in a PowerShell window:
+
+```powershell
+$localData = Join-Path $env:LOCALAPPDATA 'UrbanKart\mongodb-day1-4-dev'
+New-Item -ItemType Directory -Force (Join-Path $localData 'db') | Out-Null
+$mongod = (Get-Command mongod).Source
+$arguments = '--replSet ukLocalDev --bind_ip 127.0.0.1 --port 27020 --dbpath "{0}" --logpath "{1}" --logappend' -f (Join-Path $localData 'db'), (Join-Path $localData 'mongod.log')
+Start-Process -FilePath $mongod -ArgumentList $arguments -WindowStyle Hidden
+```
+
+On first-time setup only, initialize the local replica set and confirm the live member is loopback:
+
+```powershell
+mongosh 'mongodb://127.0.0.1:27020/admin' --quiet --eval "rs.initiate({ _id: 'ukLocalDev', members: [{ _id: 0, host: '127.0.0.1:27020' }] })"
+mongosh 'mongodb://127.0.0.1:27020/admin' --quiet --eval "db.adminCommand({ hello: 1 })"
+```
+
+Only after that confirmation, initialize and import into the explicitly named local database. These process-scoped values override the root `.env` for these commands and must not be copied into it:
+
+```powershell
+cd server
+$env:MONGODB_URI='mongodb://127.0.0.1:27020/urbankart_local_dev?replicaSet=ukLocalDev'
+$env:URBANKART_EXPECTED_DB_NAME='urbankart_local_dev'
+$env:URBANKART_DB_ENV='isolated-development'
+$env:URBANKART_TXN_TOPOLOGY_CONFIRMED='replicaSet'
+$env:URBANKART_TXN_REPLICA_SET_NAME='ukLocalDev'
+npm.cmd run db:init:local -- --confirm-local-db urbankart_local_dev
+npm.cmd run import:products -- --import --stock-default 0 --confirm-local-db urbankart_local_dev
+npm.cmd start
+```
+
+In a second PowerShell window, start the frontend with the loopback API proxy:
+
+```powershell
+cd client
+$env:URBANKART_DEV_API_PROXY='http://127.0.0.1:5000'
+npm.cmd run dev -- --host 127.0.0.1
+```
+
+Open `http://127.0.0.1:5173/`. Stop Express and Vite with `Ctrl+C`; stop MongoDB with `mongosh 'mongodb://127.0.0.1:27020/admin' --quiet --eval "db.adminCommand({ shutdown: 1 })"`. The server may close the shell connection while the shutdown command completes. The database remains in LocalAppData for the next start. Do not point either command at Atlas or the existing `test` database.
+
+## Checkout behavior
+
+Checkout reads the authenticated server-side cart and current Product records. In one MongoDB transaction, it conditionally decrements stock, writes immutable name/price/quantity snapshots into Order, writes the user/key/fingerprint mapping, and clears the cart. The unique `{ userId, key }` index prevents duplicate operations. Same-key retries resolve to the original order; conflicting cart intent returns `409`. The UI preserves one key and reconciles uncertain results; it never reports an unconfirmed order as success. No payment, shipping, tax, address, or currency behavior is implemented.
+
+## Checks
+
+```powershell
+npm test
+npm ls --depth=0
+npm ls --package-lock-only --depth=0
+```
+
+`npm test` is the offline Node test suite, including mocked API/model behavior and database-safety preflight tests. The database validator command and `test:checkout:*` scripts are real database tests and require the explicit local replica-set gate. The latest completion run verified validator rejection, same-key replay/conflict and lost-response reconciliation, rollback, and a 20-request last-unit race on a disposable MongoDB 8.3.7 replica set; see [`_day-notes/day-01-04/DAYS_01_04_COMPLETION.md`](../_day-notes/day-01-04/DAYS_01_04_COMPLETION.md) for the actual counts and limitations. No Atlas or production database was contacted.

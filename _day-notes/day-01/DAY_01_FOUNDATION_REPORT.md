@@ -1945,3 +1945,7 @@ Our infrastructure is robust, but it is currently static and insecure. In Day 2,
 *   We will deploy **JWT (JSON Web Tokens)**, locking down our API routes so that only authorized, verified users can place orders or leave reviews.
 
 **End of Day 1.** The foundation is set in stone. The database is secure. The API is alive. We are ready to scale.
+
+## Days 1–4 verification correction (2026-10-13)
+
+The preceding Day 1 report is a historical checkpoint. Its statements that validators were active on Atlas are not evidence of the current Atlas state. In the Days 1–4 completion run, an explicit local-only initializer installed seven validators on a task-owned disposable MongoDB 8.3.7 replica set, and MongoDB rejected an invalid synthetic document in each collection. Atlas was not contacted. See [`DAYS_01_04_COMPLETION.md`](../day-01-04/DAYS_01_04_COMPLETION.md) for scope and commands.
