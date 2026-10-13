@@ -37,6 +37,10 @@ The source requirements below are therefore mapped from the supplied task brief,
 
 No photographs, third-party image URLs, or external image services are used by the storefront. Product data is sourced from the API. The current product imagery is CSS artwork categorized from the API's category string; it is representative design treatment and does not claim to depict the exact product. The footer includes source attribution and links to the declared dataset licence. Retailer image/content rights remain separate and unverified.
 
+## Latest acceptance evidence — 2026-10-13
+
+The historical statuses and outstanding items below describe the earlier run. For current evidence, use the updated source-document findings, requirement-to-evidence matrix, browser journey/screenshots, database state audit, and quality results in [Days 1–4 Acceptance Follow-up — 2026-10-13](days-1-4-acceptance-follow-up-2026-10-13.md). That report supersedes older browser-blocked statuses where it records new verified evidence. Current overall verdict is **PARTIALLY ACCEPTED**; dataset declaration is **`DECLARED_CC_BY_SA_4_0`** and overall redistribution clearance is **AMBER**.
+
 ## Scope and outstanding items
 
 Days 5–6 recommendation generation, analytics, reviews, and performance benchmarking remain outside this Days 1–4 closeout unless already present as schema or scaffolding. The source-doc recovery, fresh isolated database integration, live API, browser interaction, and dataset redistribution determination remain outstanding; see the dataset assessment and existing `_day-notes/day-01-04/DAYS_01_04_COMPLETION.md` for prior evidence and setup details.

@@ -33,6 +33,7 @@ async function openAuthenticatedCheckout() {
   await screen.findByRole('button', { name: 'Sign out' });
   await screen.findByRole('heading', { name: 'Checkout' });
   await screen.findByRole('button', { name: 'Place order' });
+  expect(screen.getByText('Mock checkout only: this records an order without processing payment or delivery.')).toBeTruthy();
 }
 
 beforeEach(() => {
@@ -68,6 +69,7 @@ describe('Stage H checkout flow', () => {
     expect(await screen.findByText('Order reference')).toBeTruthy();
     expect(await screen.findByText('order-verified-1')).toBeTruthy();
     expect(screen.getByText('Server-confirmed total')).toBeTruthy();
+    expect(screen.getByText('Mock checkout complete. This synthetic order is recorded, but no payment or delivery was processed.')).toBeTruthy();
     await waitFor(() => expect(getCart).toHaveBeenCalledTimes(2));
   });
 

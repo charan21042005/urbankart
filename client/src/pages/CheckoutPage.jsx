@@ -141,7 +141,7 @@ export default function CheckoutPage() {
       <p>Order reference <strong>{order._id}</strong></p>
       <div className="checkout-order-lines">{order.items?.map((item, index) => <p key={`${item.productId}-${index}`}><span>{item.nameAtPurchase} · {item.qty}</span><strong>{formatPrice(item.priceAtPurchase * item.qty)}</strong></p>)}</div>
       <p className="checkout-confirmed-total">Server-confirmed total <strong>{formatPrice(order.totalAmount)}</strong></p>
-      <p>Payment and delivery are not handled by this project.</p>
+      <p>Mock checkout complete. This synthetic order is recorded, but no payment or delivery was processed.</p>
       <Link className="button button--dark" to="/">Continue browsing</Link>
       <button className="button checkout-new-attempt" type="button" onClick={startAnotherCheckout}>Start another checkout</button>
     </PageContainer>;
@@ -165,7 +165,7 @@ export default function CheckoutPage() {
               {['uncertain', 'ready', 'submitting'].includes(state.kind) && <button className="button button--dark" type="button" disabled={!canSubmit} onClick={placeOrder}>{state.kind === 'submitting' ? 'Placing order…' : state.kind === 'uncertain' ? 'Retry same checkout attempt' : 'Place order'}</button>}
               {state.kind === 'submitting' && <p aria-live="polite">Confirming with the server…</p>}
               {state.kind === 'checking' && <p aria-live="polite">{state.message}</p>}
-              <p className="cart-summary__note">No payment or shipping details are collected.</p>
+              <p className="cart-summary__note">Mock checkout only: this records an order without processing payment or delivery.</p>
             </aside>
           </div>}
   </PageContainer>;
