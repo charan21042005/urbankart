@@ -1,6 +1,6 @@
 # UrbanKart Client
 
-React storefront for the UrbanKart e-commerce project. Stage A's editorial paper, ink, rust, and olive design system remains the visual foundation. Stage B supplies shared API, authentication, and cart state. Stage C connects catalogue, product detail, login/registration, and cart editing screens to the existing backend. Stage D hardens cart response handling and the UI for cart changes whose outcome cannot be confirmed. Stage E source review verified the backend checkout contract, but the checkout UI remains unavailable until safe live integration can be run against an isolated local database.
+React storefront for the UrbanKart e-commerce project. Stage A's editorial paper, ink, rust, and olive design system remains the visual foundation. Stage B supplies shared API, authentication, and cart state. Stage C connects catalogue, product detail, login/registration, and cart editing screens to the existing backend. Stage D hardens cart response handling and uncertain cart mutations. Stage H adds API-connected checkout with persisted user-scoped idempotency and authenticated reconciliation, verified against a disposable local replica set.
 
 ## Local setup
 
@@ -95,3 +95,36 @@ Real local-replica-set checkout results:
 The backend still has no persistent idempotency key scoped to a customer and no authenticated order lookup/reconciliation endpoint. Transaction-retry edge cases and ambiguous commit outcomes were not injected. A client cannot safely determine whether an order committed after a lost response or ambiguous 503, so checkout remains unavailable in the storefront and uncertain requests must not be automatically retried.
 
 The standard client tests (37) and production build passed; server tests (44) passed. Those offline tests mock API/database behavior and do not establish real MongoDB behavior. The rollback and concurrency results above came from the separate, temporary replica-set database and are bounded to those test scenarios.
+
+## Stage H idempotent checkout and order reconciliation
+
+Stage H supersedes the earlier Stage E/F/G statements that checkout is unavailable and that the API has no idempotency or reconciliation. `/checkout` requires sign-in and shows the API-backed cart plus a non-authoritative subtotal preview. It does not collect payment or shipping details.
+
+`POST /api/cart/checkout` requires `Idempotency-Key` (16–128 ASCII letters, digits, `.`, `_`, `~`, or `-`). The browser creates one secure UUID per attempt, saves it in tab-scoped `sessionStorage` under a user-ID namespace, and reuses it through reconciliation/retry. The server scopes it to the authenticated user and stores a SHA-256 fingerprint of normalized product IDs and quantities with the resulting order. Missing/malformed keys return `400`; authentication is required (`401`); cart/key conflicts return `409`; unconfirmed outcomes return `503`. A unique `{ userId: 1, key: 1 }` MongoDB index enforces key uniqueness. The order, operation, conditional stock decrements, and cart clear commit together in one transaction. Server-side cart ownership, current product prices, and stock are authoritative; no client total or user ID is accepted.
+
+The initial committed request returns `201`; a same-user same-key replay returns `200` with the same order. Reuse with a changed non-empty cart returns `409` without changing stock or cart. After success, an empty cart still reconciles to the existing order. Different users may independently use the same key. A failed transaction commits no operation record, so an uncertain retry reuses the same key safely.
+
+Authenticated `GET /api/cart/checkout/:key` returns `{ status: "success", replayed: true, order }` for a committed operation or a generic `404` when no committed result is visible. A network error or `503` is never displayed as success: the UI checks reconciliation, preserves the key, and allows a same-key retry if no result is visible. If the page is refreshed, memory-only auth signs out; sign in again and the checkout page will reconcile the saved key. The opaque key alone never grants access. Tokens and passwords are not persisted.
+
+Example request:
+
+```http
+POST /api/cart/checkout
+Idempotency-Key: 5c7bd302-1f3c-4eb4-a131-d2c9bd842672
+Content-Type: application/json
+
+{}
+```
+
+A confirmed response contains the server order ID, item snapshots, server-computed `totalAmount`, status, and `replayed` boolean. An insufficient-stock/cart conflict is shown as an actionable error; the UI does not construct an order from the cart preview. No payment, delivery, address collection, or currency symbol is implemented.
+
+### Genuine local integration coverage
+
+The tests ran against a fresh disposable MongoDB Server 8.3 single-node replica set bound only to `127.0.0.1:27018`, replica-set name `ukStageH`, database `urbankart_stageh_local`. The local target, exact URI database path, `hello` topology, and writable primary were verified before synthetic fixture writes. The root `.env` values were overridden by process-scoped local settings; Atlas/production were not contacted. Automatic collection/index creation was disabled for integration connections; only after topology validation did the scripts create model indexes. Cleanup used captured synthetic user/cart/product/order/operation IDs.
+
+The idempotency integration passed first checkout `201`, replay `200` with the same order, concurrent same-key requests converging on one order, independent same keys across users, cross-user reconciliation `404`, changed-cart `409` with stock/cart unchanged, a client socket deliberately dropped after sending checkout followed by reconciliation `200`, and rollback after the operation write was reached (zero order/operation, original stock and cart). The existing real rollback test and 20-request last-unit race also passed: one `201`, nineteen `409`, stock 0, one order, winner cart cleared, losing carts retained.
+For a manual disposable local setup, start `mongod --dbpath C:\Temp\urbankart-stageh-data --bind_ip 127.0.0.1 --port 27018 --replSet ukStageH` in one terminal. In a second, run `mongosh --host 127.0.0.1 --port 27018 --eval 'rs.initiate({_id:"ukStageH",members:[{_id:0,host:"127.0.0.1:27018"}]})'`, then verify `db.adminCommand({hello:1})` before setting the explicit process-scoped local test variables and running the guarded scripts. Keep the data directory outside the repository and use a fresh disposable path. These are bounded local scenarios. Dropping the HTTP client connection verifies recovery of a committed order; it does not inject every driver-level unknown-commit-result condition. Ensure the unique compound index exists before deployment when automatic index creation is disabled.
+
+The actual Vite `/api` proxy reached the real loopback Express server and returned the health response. Chrome inspected `/`, a local fixture product detail, login, registration, guest cart, guest checkout, and not-found at 390×844, 768×1024, and 1440×1000. It completed a synthetic customer login and live checkout and displayed the real server order reference. The confirmed-order view was checked at all three sizes; document scroll width matched the viewport's client width, no browser console/runtime errors were observed, Tab focused the skip link, and reduced-motion CSS applied. Screenshots are outside the repository in `%TEMP%\urbankart-stageh-browser-qa-20261013\screenshots`.
+
+Offline verification passed: client Vitest 44 tests, server `node:test` 49 tests, production build, dependency listings, 39 JavaScript syntax checks, and `git diff --check`. Frontend mocked tests separately cover authentication gating, one key per attempt, duplicate-click prevention, timeout reconciliation, same-key retry, refresh/re-entry, API-confirmed order details, and definitive stock conflict without false success. They are not MongoDB tests. Remaining limitations include transaction commit uncertainty outside the injected scenarios, ordinary cart mutations racing with checkout (the transaction rechecks its cart fingerprint and safely conflicts), memory-only login sessions, and the absence of payment/shipping/delivery features.

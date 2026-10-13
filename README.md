@@ -112,15 +112,15 @@ The flow of data through UrbanKart prioritizes separation of concerns and databa
 ### Authentication Flow (Backend Implemented; Live Integration Depends on Database Configuration)
 `Client` → `POST /api/auth/login` → `User Model` → `Verify bcrypt Hash` → `Generate JWT` → `Protected Route Access`
 
-### Checkout Flow (Backend Route Implemented; Client Checkout Not Implemented)
-`Client Cart` → `POST /api/cart/checkout` → `Validate Stock and Read Current Prices` → `Create Order (Snapshot Pattern)` → `Transactional Inventory Deduction` → `Clear Cart`
-The route is verified from source; live checkout behavior is not implied. See [the client API contract and Stage E review](client/README.md).
-Stage F preflight found no isolated local MongoDB: the configured destination is Atlas, no local listener was present, and the Docker engine was unavailable. No live API or checkout verification ran; see the [Stage F verification notes](client/README.md#stage-f-verification).
+### Checkout Flow (Stage H Implemented and Locally Verified)
+`Authenticated cart` → `POST /api/cart/checkout + Idempotency-Key` → `server-side cart fingerprint and unique user/key operation` → `transactional stock/order/cart update` → `authenticated order reconciliation`
+Stage H now verifies the idempotent checkout and reconciliation contract against an isolated local replica set; see [the client Stage H notes](client/README.md#stage-h-idempotent-checkout-and-order-reconciliation).
+The Stage F statement below is historical and is superseded by the Stage G and Stage H local replica-set verification records.
 
 ### Recommendation Flow (📅 Planned logic, Schema ✅ Implemented)
 `Offline Job` → `Compute Similarity` → `Overwrite recommendations collection` → `Client queries O(1) Materialized View`
 
-## 🧩 7. Six Core Collections
+## 🧩 7. Core Collections and Operation Records
 
 | Collection | Purpose | Schema Fields & Key Modeling Idea | Status |
 | :--- | :--- | :--- | :--- |
@@ -128,6 +128,7 @@ Stage F preflight found no isolated local MongoDB: the configured destination is
 | **users** | Identity & Auth | `name, email, passwordHash, role` | ✅ Implemented |
 | **carts** | Volatile user state | `userId`, `items[{ productId, quantity }]`<br>**Embedded Cart Items**: Quick retrieval. | ✅ Implemented |
 | **orders** | Historical purchases | `customerId`, `items[productId, nameAtPurchase, priceAtPurchase, qty]`, `totalAmount`, `status`, `orderDate`<br>**Snapshot Pattern**: Financial immutability embedded. | ✅ Implemented |
+| **checkoutoperations** | Idempotent checkout results | `userId`, `key`, `fingerprint`, `orderId`<br>Unique `{ userId, key }` index prevents duplicate operations per user. | ✅ Implemented |
 | **reviews** | User feedback | `productId, userId, rating, comment`<br>**Referencing**: Independent scaling. | ✅ Implemented |
 | **recommendations** | Algorithmic output | `productId`, `relatedProducts[productId, score]`, `computedAt`<br>**Materialized View**: Top 5 embedded recommendations. | ✅ Implemented |
 
@@ -218,16 +219,16 @@ Instead of calculating similarity dynamically, an offline process computes relat
 | :--- | :--- |
 | GitHub Repository & Environment | ✅ Complete |
 | MongoDB Atlas Connection | ✅ Complete |
-| Six Core Mongoose Models | ✅ Complete |
+| Mongoose Models | ✅ Product, User, Cart, Order, CheckoutOperation, Review, Recommendation |
 | Database `$jsonSchema` Validation | ✅ Complete |
 | Deterministic Seed Automation | ✅ Complete (18 products) |
 | GET `/api/products` Endpoint | ✅ Complete |
 | GET `/api/health` Endpoint | ✅ Complete |
-| POST/PUT/DELETE Product CRUD | 🚧 In Progress |
-| JWT Authentication | 📅 Planned |
-| Cart & Checkout APIs | 📅 Planned |
-| React Frontend | 📅 Planned |
-| Atomic Inventory Updates | 📅 Planned |
+| POST/PUT/DELETE Product CRUD | Implemented with current-role admin authorization |
+| JWT Authentication | Implemented; browser token remains memory-only |
+| Cart & Checkout APIs | Implemented with user-scoped idempotency and reconciliation |
+| React Frontend | Implemented with API-connected checkout |
+| Atomic Inventory Updates | Transaction-backed; local replica-set scenarios verified |
 | Aggregation Analytics | 📅 Planned |
 
 ## 📁 17. Repository Structure
@@ -330,7 +331,54 @@ Checkout remains unavailable in the client. The backend has no persistent user-s
 
 Offline verification also passed: client tests (37), production build, client dependency listing, server tests (44), and server dependency listing. The server unit tests use mocks and remain distinct from the live replica-set checks above.
 
-## ⚖️ 25. License
+## Stage H — Idempotent checkout and order reconciliation
+
+`POST /api/cart/checkout` requires an authenticated request and an `Idempotency-Key` header. First success returns `201`; replay returns `200`. The key is 16–128 ASCII letters, digits, `.`, `_`, `~`, or `-`; browser attempts use `crypto.randomUUID()`. MongoDB stores the key with the authenticated user ID, a SHA-256 fingerprint of normalized product-ID/quantity intent, and the resulting order ID. A unique compound index on `{ userId: 1, key: 1 }` is the database concurrency constraint. The server never trusts client user IDs, prices, or totals.
+
+The order, idempotency operation, conditional stock decrements, and cart clear are written in one MongoDB transaction. A first committed request returns `201`; an identical replay returns `200` with the same order. Reuse with a different non-empty cart returns `409` without modifying cart or stock. An empty cart after a successful checkout reconciles to the original order. The same key is isolated across users. Definitive failed transactions leave no committed operation; a retry can safely reuse the key.
+
+`GET /api/cart/checkout/:key` requires authentication and searches only the current user's operations. It returns `200` and the persisted order, or a generic `404` if no committed result is visible. A network error or `503` is not success: the browser preserves the same key in tab-scoped `sessionStorage`, checks this endpoint, and offers a same-key retry if no result is visible. The key cannot authorize access without the bearer token and ownership check. Missing or malformed keys return `400`; authentication is required (`401`); cart/key conflicts return `409`; unconfirmed database results return `503`. Access tokens/passwords are not stored in browser storage.
+
+Example request (bearer token omitted):
+
+```http
+POST /api/cart/checkout
+Idempotency-Key: 5c7bd302-1f3c-4eb4-a131-d2c9bd842672
+Content-Type: application/json
+
+{}
+```
+
+Example successful response shape:
+
+```json
+{
+  "status": "success",
+  "replayed": false,
+  "order": {
+    "_id": "<server order id>",
+    "items": [{ "productId": "<product id>", "nameAtPurchase": "<name>", "priceAtPurchase": 12.5, "qty": 1 }],
+    "totalAmount": 12.5,
+    "status": "pending"
+  }
+}
+```
+
+### Stage H verification
+
+The disposable MongoDB Server 8.3 replica set was bound to `127.0.0.1:27018`, named `ukStageH`, and used a fresh temporary data directory and database `urbankart_stageh_local`. The application/test processes received a process-scoped local URI and test-only JWT secret, overriding the root `.env` values; no Atlas URI was used or contacted. `hello` verified the writable replica-set primary before fixture writes. Required model indexes were created only after that target/topology gate. Synthetic fixture cleanup targeted captured user, cart, product, order, and checkout-operation IDs.
+
+Offline regression verification passed: client Vitest 44 tests, server `node:test` 49 tests, client production build, dependency listings, 39 JavaScript syntax checks, and `git diff --check`. The client tests use API mocks; the live database results below are separate. Real local replica-set tests passed: first checkout `201`; same-key replay `200` with the identical order; concurrent same-key requests returned `201` and `200` with one persisted order; two users independently used the same key and could not read one another's operation (`404`); changed-cart key reuse returned `409` with stock unchanged and cart preserved; a client connection dropped after request flush was followed by successful authenticated reconciliation; injected failure after the operation write rolled back order, operation, stock, and cart. The separate real rollback test left stock 5, zero failed orders, one cart item, and ended the session. The 20-request last-unit race returned one `201` and nineteen `409`, with final stock 0, one order, only the winner cart cleared, and 19 carts retained.
+
+The dropped-connection scenario demonstrates recovery when the order committed but the client did not receive the HTTP response. It does not reproduce every driver-level unknown-commit-result case. A transaction that cannot be confirmed remains an ambiguous `503`; the client reconciles using the same key rather than creating a new attempt. The browser checkout is `/checkout`; its subtotal is only a preview and confirmation uses the server order ID and total. No payment, shipping address, delivery, or currency support exists. Authentication remains memory-only, so refresh requires sign-in again. Local integration runs cover bounded fixtures, not every production workload. Ensure the unique compound index is present before deployment if Mongoose automatic index creation is disabled.
+
+For isolated writes, run only against a disposable local replica set. From `server/`, use `MONGODB_URI=mongodb://127.0.0.1:27018/urbankart_stageh_local?replicaSet=ukStageH` as a process-scoped value, matching `URBANKART_EXPECTED_DB_NAME`, `URBANKART_TEST_DB_NAME`, `URBANKART_DB_ENV=isolated-development`, and `URBANKART_TXN_TOPOLOGY_CONFIRMED=replicaSet`, then pass `--confirm-test-db urbankart_stageh_local`. The available commands are `npm.cmd run test:checkout:idempotency`, `npm.cmd run test:checkout:rollback`, and `npm.cmd run test:checkout:concurrency`. Never run them with Atlas or production credentials. `HOST=127.0.0.1` binds a local Express server to loopback; with `HOST` unset the previous deployment binding is preserved.
+
+### Browser QA
+
+Chrome inspected `/`, a real local fixture product detail, `/login`, `/register`, guest `/cart`, guest `/checkout`, and not-found at CSS viewports 390×844, 768×1024, and 1440×1000. It also completed a real UI login, viewed the fixture cart, placed an order through the live Vite→Express→MongoDB path, and showed the API-confirmed order reference. No horizontal document overflow or browser console/runtime errors were observed; the first Tab reached the skip link and reduced-motion CSS applied. The same confirmed order view was inspected at all three viewport sizes. Screenshots were stored outside the repository under `%TEMP%\urbankart-stageh-browser-qa-20261013\screenshots`.
+
+## 25. License
 This project is licensed under the MIT License. See the `LICENSE` file for full details.
 
 <div align="center">

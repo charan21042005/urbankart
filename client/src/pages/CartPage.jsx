@@ -29,7 +29,7 @@ export default function CartPage() {
         <strong className="cart-line__total">{formatPrice(Number(product?.price) * item.quantity)}</strong>
       </article>;
     })}</div>
-      <aside className="cart-summary"><p className="eyebrow">A quick summary</p><h2>Estimated subtotal</h2><p className="cart-summary__total">{formatPrice(cart.total)}</p><p>Based on current catalogue prices. Currency is not specified by the API.</p><button type="button" disabled={cart.isMutating || cart.mutationError?.uncertain} onClick={() => cart.clearCart()}>Clear cart</button><p className="cart-summary__note">Checkout is not available yet.</p></aside>
+      <aside className="cart-summary"><p className="eyebrow">A quick summary</p><h2>Estimated subtotal</h2><p className="cart-summary__total">{formatPrice(cart.total)}</p><p>Based on current catalogue prices. Currency is not specified by the API.</p><button type="button" disabled={cart.isMutating || cart.mutationError?.uncertain} onClick={() => cart.clearCart()}>Clear cart</button><Link className="button button--dark checkout-link" to="/checkout" aria-disabled={cart.isMutating || Boolean(cart.mutationError?.uncertain)} onClick={(event) => { if (cart.isMutating || cart.mutationError?.uncertain) event.preventDefault(); }}>Continue to checkout</Link><p className="cart-summary__note">The server confirms price and stock when you place the order.</p></aside>
     </div>
   </PageContainer>;
 }

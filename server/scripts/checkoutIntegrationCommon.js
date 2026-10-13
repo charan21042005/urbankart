@@ -5,6 +5,7 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const Cart = require('../models/Cart');
 const Order = require('../models/Order');
+const CheckoutOperation = require('../models/CheckoutOperation');
 const { getJwtSecret, getJwtExpiresIn, signUserToken } = require('../middleware/auth');
 
 function requireTransactionTopology(hello, attestedTopology) {
@@ -20,13 +21,25 @@ async function prepareIntegration(argv) {
   if (!getJwtExpiresIn()) throw new safety.SafetyError('JWT_EXPIRES_IN must be a supported duration before integration tests.');
   const envTopology = process.env.URBANKART_TXN_TOPOLOGY_CONFIRMED;
   try {
+    mongoose.set('autoIndex', false);
+    mongoose.set('autoCreate', false);
     const target = await safety.connectAfterPreflight({
       mode: 'integration-test',
       argv,
-      connect: (uri) => mongoose.connect(uri, { serverSelectionTimeoutMS: 10_000 })
+      connect: (uri) => mongoose.connect(uri, {
+        serverSelectionTimeoutMS: 10_000,
+        autoIndex: false,
+        autoCreate: false
+      })
     });
     const hello = await mongoose.connection.db.admin().command({ hello: 1 });
     const topology = requireTransactionTopology(hello, envTopology);
+    await Promise.all([Product, User, Cart, Order, CheckoutOperation].map((model) => model.createIndexes()));
+    const operationIndexes = await CheckoutOperation.collection.indexes();
+    if (!operationIndexes.some((index) => index.name === 'uniq_checkout_operation_user_key'
+        && index.unique === true && index.key.userId === 1 && index.key.key === 1)) {
+      throw new safety.SafetyError('The required unique checkout operation index is unavailable. No test fixtures were created.');
+    }
     return { ...target, topology };
   } catch (error) {
     if (mongoose.connection.readyState !== 0) await mongoose.disconnect().catch(() => {});
@@ -65,22 +78,35 @@ function tokenFor(user) {
 }
 
 async function checkoutRequest(baseUrl, token) {
+  return checkoutRequestWithKey(baseUrl, token, crypto.randomUUID());
+}
+
+async function checkoutRequestWithKey(baseUrl, token, key) {
   return fetch(`${baseUrl}/api/cart/checkout`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'idempotency-key': key },
     body: '{}',
     signal: AbortSignal.timeout(20_000)
   });
 }
 
-async function cleanupFixtures({ userIds = [], productId = null, cartIds = [] }) {
+async function reconcileRequest(baseUrl, token, key) {
+  return fetch(`${baseUrl}/api/cart/checkout/${encodeURIComponent(key)}`, {
+    headers: { authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(20_000)
+  });
+}
+
+async function cleanupFixtures({ userIds = [], productId = null, productIds = [], cartIds = [] }) {
   const customerIds = userIds.map((id) => new mongoose.Types.ObjectId(id));
   if (customerIds.length) {
+    await CheckoutOperation.deleteMany({ userId: { $in: customerIds } });
     const orders = await Order.find({ customerId: { $in: customerIds } }).select('_id').lean();
     for (const order of orders) await Order.deleteOne({ _id: order._id });
   }
   for (const id of cartIds) await Cart.deleteOne({ _id: id });
   if (productId) await Product.deleteOne({ _id: productId });
+  for (const id of productIds) await Product.deleteOne({ _id: id });
   for (const id of userIds) await User.deleteOne({ _id: id });
 }
 
@@ -99,6 +125,7 @@ module.exports = {
   User,
   Cart,
   Order,
+  CheckoutOperation,
   prepareIntegration,
   requireTransactionTopology,
   createFixtureUser,
@@ -106,6 +133,8 @@ module.exports = {
   createFixtureCart,
   tokenFor,
   checkoutRequest,
+  checkoutRequestWithKey,
+  reconcileRequest,
   cleanupFixtures,
   startHttpServer
 };

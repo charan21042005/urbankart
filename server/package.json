@@ -9,6 +9,7 @@
     "audit:database": "node scripts/auditDatabaseReadOnly.js",
     "test:checkout:rollback": "node scripts/testCheckoutRollback.js",
     "test:checkout:concurrency": "node scripts/testCheckoutConcurrency.js",
+    "test:checkout:idempotency": "node scripts/testCheckoutIdempotency.js",
     "test": "node --test"
   },
   "keywords": [],

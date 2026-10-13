@@ -11,6 +11,7 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const Cart = require('../models/Cart');
 const Order = require('../models/Order');
+const CheckoutOperation = require('../models/CheckoutOperation');
 const {
   parseArguments,
   parsePrice,
@@ -47,6 +48,20 @@ function makeToken(role = 'customer', userId = new mongoose.Types.ObjectId().toS
     TEST_SECRET,
     { expiresIn: '1h', issuer: 'urbankart-api', audience: 'urbankart-client' }
   );
+}
+
+function mockCartQuery(t, getCart) {
+  t.mock.method(Cart, 'findOne', () => ({
+    lean: async () => getCart(),
+    session: async () => getCart()
+  }));
+}
+
+function mockOperationLookup(t, getOperation = () => null) {
+  t.mock.method(CheckoutOperation, 'findOne', () => ({
+    populate() { return this; },
+    lean: async () => getOperation()
+  }));
 }
 
 async function request(path, options = {}) {
@@ -308,8 +323,9 @@ test('checkout prices from products, snapshots items, decrements stock and clear
     async endSession() {}
   };
   t.mock.method(User, 'findById', () => ({ select: async () => ({ role: 'customer' }) }));
+  mockOperationLookup(t);
   t.mock.method(mongoose, 'startSession', async () => session);
-  t.mock.method(Cart, 'findOne', () => ({ session: async () => cart }));
+  mockCartQuery(t, () => cart);
   t.mock.method(Product, 'findOneAndUpdate', async (filter, update, options) => {
     assert.equal(filter.stock.$gte, 2);
     assert.equal(update.$inc.stock, -2);
@@ -321,6 +337,10 @@ test('checkout prices from products, snapshots items, decrements stock and clear
     assert.equal(options.session, session);
     return [{ ...documents[0], _id: new mongoose.Types.ObjectId() }];
   });
+  t.mock.method(CheckoutOperation, 'create', async (documents, options) => {
+    assert.equal(options.session, session);
+    return [{ ...documents[0], _id: new mongoose.Types.ObjectId(), toObject() { return this; } }];
+  });
   t.mock.method(Cart, 'updateOne', async (filter, update, options) => {
     assert.equal(options.session, session);
     assert.deepEqual(update, { $set: { items: [] } });
@@ -328,6 +348,7 @@ test('checkout prices from products, snapshots items, decrements stock and clear
     return { matchedCount: 1 };
   });
   const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}` };
+  headers['Idempotency-Key'] = 'checkout-attempt-0001';
 
   const response = await request('/api/cart/checkout', {
     method: 'POST', headers,
@@ -349,12 +370,13 @@ test('checkout rejects empty carts and insufficient stock before creating an ord
   let orderCalls = 0;
   const session = { async withTransaction(callback) { return callback(); }, async endSession() {} };
   t.mock.method(User, 'findById', () => ({ select: async () => ({ role: 'customer' }) }));
+  mockOperationLookup(t);
   t.mock.method(mongoose, 'startSession', async () => session);
-  t.mock.method(Cart, 'findOne', () => ({ session: async () => cart }));
+  mockCartQuery(t, () => cart);
   t.mock.method(Product, 'findOneAndUpdate', async () => null);
   t.mock.method(Order, 'create', async () => { orderCalls += 1; return []; });
   t.mock.method(Cart, 'updateOne', async () => ({ matchedCount: 1 }));
-  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}` };
+  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}`, 'Idempotency-Key': 'checkout-attempt-0002' };
 
   const insufficient = await request('/api/cart/checkout', { method: 'POST', headers, body: '{}' });
   assert.equal(insufficient.status, 409);
@@ -374,6 +396,7 @@ test('simultaneous checkout requests produce at most one order for the same cart
   let orders = 0;
   let transactionQueue = Promise.resolve();
   t.mock.method(User, 'findById', () => ({ select: async () => ({ role: 'customer' }) }));
+  mockOperationLookup(t);
   t.mock.method(mongoose, 'startSession', async () => ({
     async withTransaction(callback) {
       const previous = transactionQueue;
@@ -384,7 +407,7 @@ test('simultaneous checkout requests produce at most one order for the same cart
     },
     async endSession() {}
   }));
-  t.mock.method(Cart, 'findOne', () => ({ session: async () => cart }));
+  mockCartQuery(t, () => cart);
   t.mock.method(Product, 'findOneAndUpdate', async (filter) => {
     if (stock < filter.stock.$gte) return null;
     stock -= filter.stock.$gte;
@@ -394,8 +417,9 @@ test('simultaneous checkout requests produce at most one order for the same cart
     orders += 1;
     return [{ ...documents[0], _id: new mongoose.Types.ObjectId() }];
   });
+  t.mock.method(CheckoutOperation, 'create', async (documents) => [{ ...documents[0], _id: new mongoose.Types.ObjectId(), toObject() { return this; } }]);
   t.mock.method(Cart, 'updateOne', async () => { cart.items = []; return { matchedCount: 1 }; });
-  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}` };
+  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}`, 'Idempotency-Key': 'checkout-attempt-race-01' };
   const checkout = () => request('/api/cart/checkout', { method: 'POST', headers, body: '{}' });
 
   const responses = await Promise.all([checkout(), checkout()]);
@@ -412,16 +436,92 @@ test('checkout does not clear the cart when order creation fails', async (t) => 
   const session = { async withTransaction(callback) { return callback(); }, async endSession() {} };
   const clear = t.mock.method(Cart, 'updateOne', async () => ({ matchedCount: 1 }));
   t.mock.method(User, 'findById', () => ({ select: async () => ({ role: 'customer' }) }));
+  mockOperationLookup(t);
   t.mock.method(mongoose, 'startSession', async () => session);
-  t.mock.method(Cart, 'findOne', () => ({ session: async () => cart }));
+  mockCartQuery(t, () => cart);
   t.mock.method(Product, 'findOneAndUpdate', async () => ({ _id: productId, name: 'Cable', price: 5 }));
   t.mock.method(Order, 'create', async () => { throw new Error('simulated order write failure'); });
-  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}` };
+  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}`, 'Idempotency-Key': 'checkout-attempt-fail-01' };
 
   const response = await request('/api/cart/checkout', { method: 'POST', headers, body: '{}' });
   assert.equal(response.status, 503);
   assert.equal(clear.mock.callCount(), 0);
   assert.equal(cart.items.length, 1);
+});
+
+test('checkout requires a well-formed idempotency key before opening a transaction', async (t) => {
+  const userId = new mongoose.Types.ObjectId();
+  let sessionStarts = 0;
+  t.mock.method(User, 'findById', () => ({ select: async () => ({ role: 'customer' }) }));
+  t.mock.method(mongoose, 'startSession', async () => { sessionStarts += 1; throw new Error('must not start'); });
+  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}` };
+  const missing = await request('/api/cart/checkout', { method: 'POST', headers, body: '{}' });
+  const short = await request('/api/cart/checkout', { method: 'POST', headers: { ...headers, 'Idempotency-Key': 'short' }, body: '{}' });
+  const oversized = await request('/api/cart/checkout', { method: 'POST', headers: { ...headers, 'Idempotency-Key': 'k'.repeat(129) }, body: '{}' });
+  assert.deepEqual([missing.status, short.status, oversized.status], [400, 400, 400]);
+  assert.equal(sessionStarts, 0);
+});
+
+test('checkout requires authentication before idempotency processing or session creation', async (t) => {
+  let sessionStarts = 0;
+  t.mock.method(mongoose, 'startSession', async () => { sessionStarts += 1; throw new Error('must not start'); });
+  const response = await request('/api/cart/checkout', { method: 'POST', body: '{}' });
+  assert.equal(response.status, 401);
+  assert.equal(sessionStarts, 0);
+});
+
+test('checkout operation schema declares a unique user and key index', () => {
+  const uniqueIndex = CheckoutOperation.schema.indexes().find(([keys]) => keys.userId === 1 && keys.key === 1);
+  assert.ok(uniqueIndex);
+  assert.equal(uniqueIndex[1].unique, true);
+  assert.equal(uniqueIndex[1].name, 'uniq_checkout_operation_user_key');
+});
+
+test('checkout replay returns the original user-scoped operation and changed cart conflicts', async (t) => {
+  const userId = new mongoose.Types.ObjectId();
+  const originalProduct = new mongoose.Types.ObjectId();
+  const changedProduct = new mongoose.Types.ObjectId();
+  const order = { _id: new mongoose.Types.ObjectId(), totalAmount: 9.5 };
+  const operation = { fingerprint: require('node:crypto').createHash('sha256').update(JSON.stringify([[originalProduct.toString(), 1]])).digest('hex'), orderId: order };
+  let currentCart = { userId, items: [{ productId: originalProduct, quantity: 1 }] };
+  const filters = [];
+  t.mock.method(User, 'findById', () => ({ select: async () => ({ role: 'customer' }) }));
+  t.mock.method(Cart, 'findOne', (filter) => ({ lean: async () => currentCart }));
+  t.mock.method(CheckoutOperation, 'findOne', (filter) => {
+    filters.push(filter);
+    return { populate() { return this; }, lean: async () => String(filter.userId) === userId.toString() ? operation : null };
+  });
+  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}`, 'Idempotency-Key': 'checkout-replay-0001' };
+  const replay = await request('/api/cart/checkout', { method: 'POST', headers, body: '{}' });
+  assert.equal(replay.status, 200);
+  assert.equal((await replay.json()).order._id, order._id.toString());
+
+  currentCart = { userId, items: [{ productId: changedProduct, quantity: 1 }] };
+  const conflict = await request('/api/cart/checkout', { method: 'POST', headers, body: '{}' });
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).code, 'IDEMPOTENCY_KEY_REUSED');
+  assert.equal(filters.every((filter) => String(filter.userId) === userId.toString()), true);
+});
+
+test('checkout reconciliation requires authentication and returns only the current user operation', async (t) => {
+  const ownerId = new mongoose.Types.ObjectId();
+  const strangerId = new mongoose.Types.ObjectId();
+  const order = { _id: new mongoose.Types.ObjectId(), totalAmount: 4 };
+  const queriedOwners = [];
+  t.mock.method(User, 'findById', () => ({ select: async () => ({ role: 'customer' }) }));
+  t.mock.method(CheckoutOperation, 'findOne', (filter) => {
+    queriedOwners.push(filter.userId.toString());
+    return { populate() { return this; }, lean: async () => String(filter.userId) === ownerId.toString() ? { orderId: order } : null };
+  });
+  const key = 'checkout-reconcile-001';
+  const owner = await request(`/api/cart/checkout/${key}`, { headers: { authorization: `Bearer ${makeToken('customer', ownerId.toString())}` } });
+  assert.equal(owner.status, 200);
+  assert.equal((await owner.json()).order._id, order._id.toString());
+  const stranger = await request(`/api/cart/checkout/${key}`, { headers: { authorization: `Bearer ${makeToken('customer', strangerId.toString())}` } });
+  assert.equal(stranger.status, 404);
+  const anonymous = await request(`/api/cart/checkout/${key}`);
+  assert.equal(anonymous.status, 401);
+  assert.deepEqual(queriedOwners, [ownerId.toString(), strangerId.toString()]);
 });
 
 test('product model enforces integer stock and key/value attributes', async () => {
