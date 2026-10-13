@@ -100,7 +100,7 @@ The checkout contains no canonical SRS/roadmap/Day 3 guide. The source traceabil
 - [x] Record limits without claiming live integration.
 - [ ] Confirm the Atlas project/cluster is isolated, then configure expected/test database names and human environment/topology assertions locally; do not share credentials or URI.
 - [ ] Run a read-only audit of collections, counts, indexes, validators, and Day 1 products only after the database identity is unambiguous.
-- [ ] Verify replica-set/sharded transaction support, then run rollback and 20-request final-unit checkout integration tests against an isolated test database.
+- [x] Run rollback and 20-request final-unit checkout integration scenarios against the isolated test database; see the latest verification addendum for supplied live results.
 - [ ] Review canonical SRS/roadmap requirements when available; decide if durable checkout idempotency is required.
 - [ ] Verify Kaggle license/currency/stock policy before any future catalog import. Import write mode remains a separate approval gate.
 
@@ -110,7 +110,7 @@ The checkout contains no canonical SRS/roadmap/Day 3 guide. The source traceabil
 - **Why keep order snapshots?** Product names and prices can change later. The order stores the purchase-time values as well as the product reference so a receipt stays historically meaningful.
 - **Why use a conditional stock update?** The quantity check and decrement happen in one database write. If stock is below the requested quantity, the filter matches no document and the checkout fails instead of creating negative stock.
 - **Why use a transaction?** Stock, order, and cart are separate documents/collections. A transaction makes the multi-document checkout succeed or fail together, but only on a topology that supports transactions.
-- **What remains unproven?** Mock tests cannot establish live topology, indexes, database validators, transaction rollback, or real concurrent outcomes. Those require the explicitly identified isolated database and integration tests.
+- **What remains unproven?** Mock tests cannot establish live topology, indexes, database validators, transaction rollback, or real concurrent outcomes. The latest addendum records two supplied live checkout scenarios on a replica set; they do not prove behavior under every production workload.
 
 ### Verification addendum (2026-10-12)
 
@@ -138,3 +138,21 @@ The checkout contains no canonical SRS/roadmap/Day 3 guide. The source traceabil
 - The audit command was attempted, but the audit did not return findings and is not considered successful. No checkout integration tests, seed operations, catalogue imports, or write/index/validator operations were run. The existing test database was not the configured target.
 - Live rollback and concurrency behavior remain unverified. Offline unit tests do not establish Atlas transaction support, persisted rollback, or real concurrent checkout behavior.
 - Current offline checkpoint checks passed: npm test reported 36 passed and 0 failed; syntax checks passed for 24 JavaScript files; npm ls --depth=0 and npm ls --package-lock-only --depth=0 passed. DOCX package and Markdown/DOCX consistency checks are recorded for this report update.
+
+### Live checkout integration verification (2026-10-13)
+
+The following results were supplied for successful runs against the isolated Atlas database `urbankart_day3_verify`. The reported topology was `replicaSet`. These are live database integration scenarios and are distinct from the offline unit/mock suite; they are recorded as supplied results and were not rerun during this documentation follow-up.
+
+**Rollback scenario**
+
+- Starting stock: 5; stock after rollback: 5.
+- Failed customer orders persisted: 0; cart items preserved: 1.
+- The stock update was reached, the order-creation failure was injected, and the session ended: all true.
+
+**Twenty-request concurrency scenario**
+
+- Concurrent requests: 20; HTTP 201 responses: 1; HTTP 409 responses: 19.
+- Final stock: 0; orders created: 1.
+- Successful customer's cart items: 0; failed customers' carts retained: 19.
+
+These outcomes verify the specific rollback and last-unit contention scenarios reported for this isolated replica-set database. They do not establish correctness under every workload or production conditions. Persistent idempotency for delayed replayed checkout requests remains absent. Concurrent cart edits can still race with checkout. Index/validator state and the broader database audit remain unverified. The reported Mongoose deprecation warning was observed during those test runs; the checkout stock update now uses `returnDocument: 'after'` in place of the deprecated `new` option. No `findOneAndReplace()` application call site was identified in the repository, so the source of its reported warning remains undetermined.
