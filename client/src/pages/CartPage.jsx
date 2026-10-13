@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 export default function CartPage() {
   const auth = useAuth();
   const cart = useCart();
+  // Set a descriptive title when the cart route is active.
   useEffect(() => { document.title = 'Your cart | UrbanKart'; }, []);
 
   if (!auth.isAuthenticated) return <PageContainer className="route-state"><p className="eyebrow">Your saved selection</p><h1>Your cart is waiting.</h1><p>Sign in to view and update the cart linked to your account.</p><Link className="button button--dark" to="/login" state={{ from: '/cart' }}>Sign in</Link><p className="route-state__secondary">New to UrbanKart? <Link to="/register" state={{ from: '/cart' }}>Create an account</Link></p></PageContainer>;

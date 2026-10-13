@@ -5,9 +5,9 @@ function readCount(value) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export async function getProducts({ page = 1, limit = 20, search = '', category = '', signal } = {}) {
+export async function getProducts({ page = 1, limit = 20, search = '', category = '', sort = 'newest', signal } = {}) {
   const { data, headers } = await httpClient.get('/products', {
-    params: { page, limit, ...(search ? { search } : {}), ...(category ? { category } : {}) },
+    params: { page, limit, ...(search ? { search } : {}), ...(category ? { category } : {}), ...(sort !== 'newest' ? { sort } : {}) },
     signal
   });
   if (!Array.isArray(data)) throw new Error('The product service returned an unexpected response.');
@@ -20,6 +20,14 @@ export async function getProducts({ page = 1, limit = 20, search = '', category 
       totalPages: readCount(headers['x-total-pages'])
     }
   };
+}
+
+export async function getCategories({ signal } = {}) {
+  const { data } = await httpClient.get('/products/categories', { signal });
+  if (!Array.isArray(data) || data.some((category) => typeof category !== 'string')) {
+    throw new Error('The category service returned an unexpected response.');
+  }
+  return data;
 }
 
 export async function getProduct(id, { signal } = {}) {

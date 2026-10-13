@@ -6,7 +6,7 @@ const { authenticate, loadCurrentUser, requireAdmin } = require('../middleware/a
 const router = express.Router();
 const MAX_PAGE_SIZE = 100;
 const MAX_BSON_INT32 = 2_147_483_647;
-const PRODUCT_FIELDS = new Set(['name', 'description', 'price', 'stock', 'category', 'attributes']);
+const PRODUCT_FIELDS = new Set(['name', 'description', 'price', 'stock', 'category', 'attributes', 'tags']);
 
 function parsePositiveInteger(value, fallback) {
   if (value === undefined) return fallback;
@@ -29,6 +29,9 @@ function validateProductPayload(body, { partial = false } = {}) {
       return `${field} must be a string.`;
     }
   }
+  if ((body.name?.length ?? 0) > 300 || (body.category?.length ?? 0) > 120 || (body.description?.length ?? 0) > 20000) {
+    return 'A product text field exceeds its allowed length.';
+  }
   if (Object.hasOwn(body, 'price') && (typeof body.price !== 'number' || !Number.isFinite(body.price) || body.price < 0)) {
     return 'Price must be a non-negative number.';
   }
@@ -45,11 +48,11 @@ function validateProductPayload(body, { partial = false } = {}) {
       }
     }
   }
+  if (Object.hasOwn(body, 'tags') && (!Array.isArray(body.tags) || body.tags.length > 50
+    || body.tags.some((tag) => typeof tag !== 'string' || !tag.trim() || tag.length > 120))) {
+    return 'Tags must be an array of at most 50 non-empty strings.';
+  }
   return null;
-}
-
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 router.get('/', async (req, res) => {
@@ -64,21 +67,39 @@ router.get('/', async (req, res) => {
   }
   const category = req.query.category;
   const search = req.query.search;
+  const requestedSort = req.query.sort === undefined ? 'newest' : req.query.sort;
+  const sortModes = {
+    newest: { createdAt: -1, _id: 1 },
+    'price-asc': { price: 1, _id: 1 },
+    'price-desc': { price: -1, _id: 1 },
+    'name-asc': { name: 1, _id: 1 }
+  };
   if ((category !== undefined && (typeof category !== 'string' || category.length > 120))
-    || (search !== undefined && (typeof search !== 'string' || search.length > 100))) {
-    return res.status(400).json({ status: 'error', message: 'Category or search query is invalid.' });
+    || (search !== undefined && (typeof search !== 'string' || search.length > 100))
+    || typeof requestedSort !== 'string' || !Object.hasOwn(sortModes, requestedSort)) {
+    return res.status(400).json({ status: 'error', message: 'Category, search query, or sort option is invalid.' });
   }
 
   const filter = {};
   if (category) filter.category = category.trim();
   if (search?.trim()) {
-    const expression = new RegExp(escapeRegex(search.trim()), 'i');
-    filter.$or = [{ name: expression }, { description: expression }];
+    filter.$text = { $search: search.trim() };
   }
+  const hasSearch = Boolean(search?.trim());
+  const selectedSort = sortModes[requestedSort];
+  const searchSort = hasSearch && req.query.sort !== undefined
+    ? {
+      ...Object.fromEntries(Object.entries(selectedSort).filter(([field]) => field !== '_id')),
+      score: { $meta: 'textScore' },
+      _id: 1
+    }
+    : hasSearch
+      ? { score: { $meta: 'textScore' }, createdAt: -1, _id: 1 }
+      : selectedSort;
 
   try {
     const [products, total] = await Promise.all([
-      Product.find(filter).sort({ createdAt: -1, _id: 1 }).skip((page - 1) * limit).limit(limit),
+      Product.find(filter).sort(searchSort).skip((page - 1) * limit).limit(limit),
       Product.countDocuments(filter)
     ]);
     res.set({
@@ -90,6 +111,16 @@ router.get('/', async (req, res) => {
     return res.status(200).json(products);
   } catch {
     return res.status(500).json({ status: 'error', message: 'Failed to retrieve products.' });
+  }
+});
+
+router.get('/categories', async (req, res) => {
+  try {
+    const categories = await Product.distinct('category');
+    const uniqueCategories = [...new Set(categories.filter((category) => typeof category === 'string' && category.trim()))];
+    return res.status(200).json(uniqueCategories.sort((left, right) => left.localeCompare(right)));
+  } catch {
+    return res.status(500).json({ status: 'error', message: 'Failed to retrieve product categories.' });
   }
 });
 

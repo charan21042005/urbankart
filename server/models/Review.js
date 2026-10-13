@@ -36,11 +36,14 @@ const reviewSchema = new mongoose.Schema({
   },
   
   // The optional text comment left by the user. 'trim' cleans up accidental spaces.
-  comment: { type: String, trim: true }
+  comment: { type: String, trim: true, maxlength: 4000 }
 }, { 
   // Automatically manage 'createdAt' and 'updatedAt' timestamps
   timestamps: true 
 });
+
+reviewSchema.index({ productId: 1, createdAt: -1 }, { name: 'idx_reviews_product_created' });
+reviewSchema.index({ userId: 1, productId: 1 }, { name: 'idx_reviews_user_product' });
 
 // 3. Compile the schema into a Mongoose model named 'Review' and export it
 module.exports = mongoose.model('Review', reviewSchema);

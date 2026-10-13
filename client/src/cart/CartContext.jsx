@@ -17,6 +17,8 @@ function uncertainMutationError() {
 }
 
 export function CartProvider({ children }) {
+  // Global cart state is scoped to the authenticated user and supplies the
+  // header, product details, cart page, and checkout with server-confirmed data.
   const auth = useAuth();
   const [state, setState] = useState({ status: 'idle', ownerId: null, sessionRevision: null, data: emptyCart, error: null });
   const requestId = useRef(0);
@@ -81,6 +83,8 @@ export function CartProvider({ children }) {
   const clearMutationError = useCallback(() => setMutationState((current) => ({ ...current, error: null })), []);
 
   useEffect(() => {
+    // Re-read the current user's cart when auth/session state changes, and
+    // abort stale requests so a prior account cannot populate the next cart.
     const ownRequest = ++requestId.current;
     if (!auth.isAuthenticated || !currentUserId || auth.isInitializing || auth.isSubmitting) {
       setState({ status: 'idle', ownerId: null, sessionRevision: null, data: emptyCart, error: null });

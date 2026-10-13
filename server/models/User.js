@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 // 2. Define the User Schema. This acts as a strict blueprint for user data.
 const userSchema = new mongoose.Schema({
   // The user's full name. It is mandatory, and 'trim' removes accidental spaces.
-  name: { type: String, required: true, trim: true },
+  name: { type: String, required: true, trim: true, maxlength: 100 },
   
   // The user's email address.
   email: { 
@@ -14,7 +14,8 @@ const userSchema = new mongoose.Schema({
     unique: true, 
     // Automatically convert emails to lowercase so 'John@test.com' and 'john@test.com' are treated equally
     lowercase: true, 
-    trim: true 
+    trim: true,
+    maxlength: 254
   },
   
   // We store a securely hashed version of the password, NEVER the plaintext password.
@@ -27,7 +28,9 @@ const userSchema = new mongoose.Schema({
     enum: ['customer', 'admin'], 
     // By default, everyone who signs up is a standard customer
     default: 'customer' 
-  }
+  },
+  // Retain a minimal tombstone for historical order references after closure.
+  isActive: { type: Boolean, default: true }
 }, { 
   // Automatically manage 'createdAt' and 'updatedAt' timestamps
   timestamps: true 

@@ -36,6 +36,9 @@ function getUriDatabaseName(uri) {
     throw new SafetyError('MONGODB_URI contains an invalid database path.');
   }
   const queryName = parsed.searchParams.get('dbName');
+  if (parsed.searchParams.getAll('dbName').length > 1) {
+    throw new SafetyError('MONGODB_URI contains ambiguous repeated dbName options.');
+  }
   if (pathName && queryName && pathName !== queryName) {
     throw new SafetyError('The URI path and dbName option select different databases.');
   }
@@ -77,10 +80,28 @@ function validateLocalReplicaSetUri(uri) {
   return { replicaSet };
 }
 
+function validateLocalReplicaSetHello(hello, expectedName) {
+  if (hello?.setName !== expectedName || hello?.isWritablePrimary !== true) {
+    throw new SafetyError('Connected server is not the confirmed writable local replica-set primary.');
+  }
+  const members = [...(hello.hosts || []), ...(hello.passives || []), ...(hello.arbiters || [])];
+  if (!members.length) throw new SafetyError('The connected replica set did not report any verifiable members.');
+  for (const member of members) {
+    try {
+      validateLocalReplicaSetUri(`mongodb://${member}/urbankart_preflight?replicaSet=${encodeURIComponent(expectedName)}`);
+    } catch {
+      throw new SafetyError('The connected replica set advertises a non-loopback member. No database writes were performed.');
+    }
+  }
+  return true;
+}
+
 function validatePreflight({ mode, argv, env }) {
   const isAudit = mode === 'audit';
-  const flag = isAudit ? '--confirm-isolated-db' : '--confirm-test-db';
-  if (!isAudit && mode !== 'integration-test') throw new SafetyError('Unknown database tool mode.');
+  const isIntegration = mode === 'integration-test';
+  const isLocalWrite = mode === 'local-write';
+  const flag = isAudit ? '--confirm-isolated-db' : isLocalWrite ? '--confirm-local-db' : '--confirm-test-db';
+  if (!isAudit && !isIntegration && !isLocalWrite) throw new SafetyError('Unknown database tool mode.');
 
   const confirmedName = argumentValue(argv, flag);
   if (!confirmedName) throw new SafetyError(`Required explicit confirmation: ${flag} <database-name>.`);
@@ -94,7 +115,7 @@ function validatePreflight({ mode, argv, env }) {
     throw new SafetyError('Set URBANKART_DB_ENV=isolated-development only after confirming the Atlas project and cluster are isolated and non-production.');
   }
 
-  if (!isAudit) {
+  if (isIntegration) {
     if (!env.URBANKART_TEST_DB_NAME || env.URBANKART_TEST_DB_NAME !== configuredName) {
       throw new SafetyError('URBANKART_TEST_DB_NAME must exactly match the explicitly confirmed disposable test database.');
     }
@@ -104,6 +125,9 @@ function validatePreflight({ mode, argv, env }) {
   }
 
   const localTopology = isAudit ? null : validateLocalReplicaSetUri(env.MONGODB_URI);
+  if (!isAudit && env.URBANKART_TXN_TOPOLOGY_CONFIRMED !== 'replicaSet') {
+    throw new SafetyError('Local database writes require URBANKART_TXN_TOPOLOGY_CONFIRMED=replicaSet.');
+  }
   if (!isAudit && (!env.URBANKART_TXN_REPLICA_SET_NAME
       || env.URBANKART_TXN_REPLICA_SET_NAME !== localTopology.replicaSet)) {
     throw new SafetyError('URBANKART_TXN_REPLICA_SET_NAME must match the replicaSet value in the local MongoDB URI.');
@@ -150,5 +174,6 @@ module.exports = {
   connectAfterPreflight,
   classifyTopology,
   assessTransactionVersion,
-  validateLocalReplicaSetUri
+  validateLocalReplicaSetUri,
+  validateLocalReplicaSetHello
 };

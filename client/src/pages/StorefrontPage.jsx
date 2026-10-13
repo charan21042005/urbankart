@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import PageContainer from '../components/layout/PageContainer.jsx';
 import ProductCard from '../components/catalog/ProductCard.jsx';
-import { getProducts } from '../api/productApi.js';
+import { getCategories, getProducts } from '../api/productApi.js';
 
 const PAGE_SIZE = 20;
 const readPage = (value) => /^\d+$/.test(value || '') && Number(value) > 0 ? Number(value) : 1;
@@ -11,14 +11,26 @@ export default function StorefrontPage() {
   const [params, setParams] = useSearchParams();
   const search = params.get('search') || '';
   const category = params.get('category') || '';
+  const sort = params.get('sort') || 'newest';
   const page = readPage(params.get('page'));
   const [draft, setDraft] = useState(search);
   const [state, setState] = useState({ status: 'loading', products: [], pagination: null, error: null });
   const [categories, setCategories] = useState([]);
   const generation = useRef(0);
 
+  // Categories come from the complete catalog endpoint, not only the current page.
+  useEffect(() => {
+    const controller = new AbortController();
+    getCategories({ signal: controller.signal }).then(setCategories).catch(() => {
+      if (!controller.signal.aborted) setCategories([]);
+    });
+    return () => controller.abort();
+  }, []);
+
+  // Keep the input draft synchronized when browser navigation changes the URL search.
   useEffect(() => setDraft(search), [search]);
 
+  // Debounce typing into URL state so each search is shareable without a request per keystroke.
   useEffect(() => {
     const timer = setTimeout(() => {
       if (draft === search) return;
@@ -34,16 +46,16 @@ export default function StorefrontPage() {
     const ownGeneration = ++generation.current;
     setState((current) => ({ ...current, status: 'loading', pagination: null, error: null }));
     try {
-      const result = await getProducts({ page, limit: PAGE_SIZE, search, category, signal });
+      const result = await getProducts({ page, limit: PAGE_SIZE, search, category, sort, signal });
       if (ownGeneration !== generation.current || signal?.aborted) return;
       setState({ status: result.products.length ? 'ready' : 'empty', ...result, error: null });
-      setCategories((current) => [...new Set([...current, ...result.products.map((item) => item.category).filter((item) => typeof item === 'string' && item.trim())])].sort((a, b) => a.localeCompare(b)));
     } catch (error) {
       if (ownGeneration !== generation.current || signal?.aborted) return;
       setState({ status: 'error', products: [], pagination: null, error });
     }
-  }, [page, search, category]);
+  }, [page, search, category, sort]);
 
+  // Load the selected API-backed page and discard responses superseded by newer filters.
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal);
@@ -60,6 +72,7 @@ export default function StorefrontPage() {
   const totalPages = state.pagination?.totalPages;
   const canCount = state.pagination?.totalCount !== null && state.pagination?.totalCount !== undefined;
 
+  // Set a route-specific title once the storefront mounts.
   useEffect(() => { document.title = 'Shop | UrbanKart'; }, []);
 
   return (
@@ -89,6 +102,10 @@ export default function StorefrontPage() {
           <label className="catalog-category"><span>Category</span><select value={category} onChange={(event) => setFilter('category', event.target.value)}>
             <option value="">All observed categories</option>
             {categories.map((item) => <option value={item} key={item}>{item}</option>)}
+          </select></label>
+          <label className="catalog-sort"><span>Sort by</span><select value={sort} onChange={(event) => setFilter('sort', event.target.value)}>
+            <option value="newest">Newest</option><option value="price-asc">Price: low to high</option>
+            <option value="price-desc">Price: high to low</option><option value="name-asc">Name: A to Z</option>
           </select></label>
           {(search || category) && <button className="filter-clear" type="button" onClick={clearFilters}>Clear filters</button>}
         </form>

@@ -26,13 +26,20 @@ const recommendationSchema = new mongoose.Schema({
     // The algorithmic similarity score (e.g. how strongly they are related)
     score: { 
       type: Number, 
-      required: true 
+      required: true,
+      min: 0,
+      max: 1
     }
   }],
   
   // When this recommendation was generated. Helps us know if the data is stale/old.
   computedAt: { type: Date, required: true }
 });
+
+recommendationSchema.path('relatedProducts').validate(
+  (products) => products.length <= 5,
+  'A recommendation cache may contain at most five products.'
+);
 
 // 3. Compile the schema into a Mongoose model named 'Recommendation' and export it
 module.exports = mongoose.model('Recommendation', recommendationSchema);

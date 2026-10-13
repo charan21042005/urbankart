@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { test } = require('node:test');
 const mongoose = require('mongoose');
 const {
@@ -6,7 +8,8 @@ const {
   validatePreflight,
   connectAfterPreflight,
   classifyTopology,
-  assessTransactionVersion
+  assessTransactionVersion,
+  validateLocalReplicaSetHello
 } = require('../scripts/databaseSafety');
 const { readDay1SeedNames, connectReadOnly } = require('../scripts/auditDatabaseReadOnly');
 const { requireTransactionTopology } = require('../scripts/checkoutIntegrationCommon');
@@ -150,6 +153,32 @@ test('integration preflight accepts only explicit loopback replica-set targets b
   }
 });
 
+test('local database write preflight requires a loopback target and explicit local database name', () => {
+  const args = ['--confirm-local-db', dbName];
+  const expected = validatePreflight({ mode: 'local-write', argv: args, env: validEnv() });
+  assert.equal(expected.databaseName, dbName);
+  for (const uri of [
+    'mongodb+srv://cluster.example/urbankart_test_isolated?replicaSet=ukStageH',
+    'mongodb://remote.example/urbankart_test_isolated?replicaSet=ukStageH',
+    'mongodb://10.0.0.2:27017/urbankart_test_isolated?replicaSet=ukStageH'
+  ]) {
+    assert.throws(() => validatePreflight({ mode: 'local-write', argv: args, env: validEnv({ MONGODB_URI: uri }) }), SafetyError);
+  }
+  assert.throws(() => validatePreflight({ mode: 'local-write', argv: [], env: validEnv() }), SafetyError);
+});
+
+test('live replica-set identity gate requires a writable local primary and loopback members', () => {
+  assert.equal(validateLocalReplicaSetHello({
+    setName: 'ukStageH', isWritablePrimary: true, hosts: ['127.0.0.1:27018']
+  }, 'ukStageH'), true);
+  for (const hello of [
+    { setName: 'other', isWritablePrimary: true, hosts: ['127.0.0.1:27018'] },
+    { setName: 'ukStageH', isWritablePrimary: false, hosts: ['127.0.0.1:27018'] },
+    { setName: 'ukStageH', isWritablePrimary: true, hosts: ['mongodb.example:27017'] },
+    { setName: 'ukStageH', isWritablePrimary: true, hosts: [] }
+  ]) assert.throws(() => validateLocalReplicaSetHello(hello, 'ukStageH'), SafetyError);
+});
+
 test('a database name containing dev/test is not accepted without explicit confirmations', () => {
   assert.throws(() => validatePreflight({
     mode: 'audit', argv: [], env: { MONGODB_URI: 'mongodb://localhost/test' }
@@ -202,8 +231,18 @@ test('a post-connect database mismatch closes the injected connection', async ()
   assert.equal(closed, true);
 });
 
-test('Day 1 seed names are read statically without executing the destructive seed script', () => {
+test('Day 1 sample seed preserves its records and is explicitly local-only and non-destructive', () => {
   const names = readDay1SeedNames();
   assert.equal(names.length, 18);
   assert.ok(names.includes('Urban X-Pro Laptop'));
+  const seedSource = fs.readFileSync(path.resolve(__dirname, '../seed/seedProducts.js'), 'utf8');
+  assert.match(seedSource, /mode:\s*'local-write'/);
+  assert.match(seedSource, /validateLocalReplicaSetHello/);
+  assert.match(seedSource, /\$setOnInsert/);
+  assert.doesNotMatch(seedSource, /deleteMany\s*\(/);
+});
+
+test('dataset importer validates every advertised replica-set member before writes', () => {
+  const importerSource = fs.readFileSync(path.resolve(__dirname, '../seed/importKaggleProducts.js'), 'utf8');
+  assert.match(importerSource, /validateLocalReplicaSetHello\(hello, target\.expectedReplicaSetName\)/);
 });

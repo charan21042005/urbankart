@@ -7,6 +7,8 @@
     "start": "node server.js",
     "import:products": "node seed/importKaggleProducts.js",
     "audit:database": "node scripts/auditDatabaseReadOnly.js",
+    "db:init:local": "node scripts/initLocalDatabase.js",
+    "test:db:validation": "node scripts/testDatabaseValidation.js",
     "test:checkout:rollback": "node scripts/testCheckoutRollback.js",
     "test:checkout:concurrency": "node scripts/testCheckoutConcurrency.js",
     "test:checkout:idempotency": "node scripts/testCheckoutIdempotency.js",

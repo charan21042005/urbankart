@@ -23,6 +23,7 @@ const orderItemSchema = new mongoose.Schema({
     type: Number, 
     required: true, 
     min: 1, 
+    max: 2_147_483_647,
     validate: { validator: Number.isInteger, message: 'Quantity must be an integer.' }
   }
 }, { 
@@ -48,7 +49,7 @@ const orderSchema = new mongoose.Schema({
   // The current progression state of the order. Defaults to 'pending'.
   status: { 
     type: String, 
-    enum: ['pending', 'shipped', 'delivered', 'cancelled'], 
+    enum: ['pending', 'completed', 'shipped', 'delivered', 'cancelled'],
     default: 'pending' 
   },
   
@@ -58,6 +59,10 @@ const orderSchema = new mongoose.Schema({
   // Automatically manage 'createdAt' and 'updatedAt' timestamps
   timestamps: true 
 });
+
+orderSchema.path('items').validate((items) => items.length > 0, 'An order must contain at least one line item.');
+
+orderSchema.index({ customerId: 1, orderDate: -1 }, { name: 'idx_orders_customer_date' });
 
 // 4. Compile the schema into a Mongoose model named 'Order' and export it
 module.exports = mongoose.model('Order', orderSchema);

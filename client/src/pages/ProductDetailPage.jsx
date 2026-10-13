@@ -17,6 +17,7 @@ export default function ProductDetailPage() {
   const [feedback, setFeedback] = useState('');
   const [retryCount, setRetryCount] = useState(0);
 
+  // Fetch the route's product from the API; abort on navigation and retry on request.
   useEffect(() => {
     const controller = new AbortController();
     setState({ status: 'loading', product: null, error: null });
@@ -30,6 +31,7 @@ export default function ProductDetailPage() {
     return () => controller.abort();
   }, [id, retryCount]);
 
+  // Keep the document title aligned with the currently loaded product.
   useEffect(() => { document.title = state.product?.name ? `${state.product.name} | UrbanKart` : 'Product | UrbanKart'; }, [state.product]);
 
   const product = state.product;

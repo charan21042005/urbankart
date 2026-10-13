@@ -4,6 +4,7 @@ const path = require('node:path');
 const csv = require('csv-parser');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
+const safety = require('../scripts/databaseSafety');
 const Product = require('../models/Product');
 const { parseProductSpecifications } = require('./parseProductSpecifications');
 
@@ -15,7 +16,7 @@ const BATCH_SIZE = 500;
 const MAX_STOCK = 2_147_483_647;
 
 function parseArguments(args) {
-  const options = { import: false, stockDefault: null };
+  const options = { import: false, stockDefault: null, confirmDbName: null };
   for (let index = 0; index < args.length; index += 1) {
     if (args[index] === '--import') {
       options.import = true;
@@ -28,12 +29,25 @@ function parseArguments(args) {
       }
       options.stockDefault = Number(value);
       index += 1;
+    } else if (args[index] === '--confirm-local-db') {
+      const value = args[index + 1];
+      if (!value || value.startsWith('--') || options.confirmDbName) {
+        throw new Error('--confirm-local-db must be supplied once with the exact local database name.');
+      }
+      options.confirmDbName = value;
+      index += 1;
     } else {
       throw new Error(`Unknown argument: ${args[index]}`);
     }
   }
   if (options.import && options.stockDefault === null) {
     throw new Error('Import mode requires --stock-default <integer>; the CSV has no inventory data.');
+  }
+  if (options.import && !options.confirmDbName) {
+    throw new Error('Import mode requires --confirm-local-db <database-name>.');
+  }
+  if (!options.import && options.confirmDbName) {
+    throw new Error('--confirm-local-db is only valid together with --import.');
   }
   if (options.stockDefault !== null && (!Number.isSafeInteger(options.stockDefault) || options.stockDefault > MAX_STOCK)) {
     throw new Error('--stock-default must fit a non-negative BSON int32.');
@@ -155,13 +169,14 @@ function createSummary() {
     duplicateProducts: 0,
     missingBrands: 0,
     skippedProductValidation: 0,
+    modelValidationFailures: {},
     newlyImported: 0,
     alreadyPresent: 0,
     failedWrites: 0
   };
 }
 
-async function runImport({ importToDatabase = false, stockDefault = 0, csvPath = CSV_PATH } = {}) {
+async function runImport({ importToDatabase = false, stockDefault = 0, csvPath = CSV_PATH, argv = process.argv.slice(2) } = {}) {
   if (!fs.existsSync(csvPath)) throw new Error(`Dataset file not found: ${csvPath}`);
   const summary = createSummary();
   const seenSourceIds = new Set();
@@ -195,8 +210,27 @@ async function runImport({ importToDatabase = false, stockDefault = 0, csvPath =
 
   try {
     if (importToDatabase) {
-      if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI is required for import mode.');
-      await mongoose.connect(process.env.MONGODB_URI);
+      mongoose.set('autoCreate', false);
+      mongoose.set('autoIndex', false);
+      const target = await safety.connectAfterPreflight({
+        mode: 'local-write',
+        argv,
+        connect: (uri) => mongoose.connect(uri, {
+          autoCreate: false,
+          autoIndex: false,
+          serverSelectionTimeoutMS: 10_000
+        })
+      });
+      const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+      safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
+      const productInfo = await mongoose.connection.db.listCollections({ name: Product.collection.name }).next();
+      if (!productInfo?.options?.validator?.$jsonSchema) {
+        throw new safety.SafetyError('Initialize and verify the local products validator before importing. No rows were imported.');
+      }
+      const productIndexes = await Product.collection.indexes();
+      if (!productIndexes.some((index) => index.name === 'text_products_name_description_tags')) {
+        throw new safety.SafetyError('Initialize and verify the local product text index before importing. No rows were imported.');
+      }
     }
 
     parser = fs.createReadStream(csvPath).pipe(csv({ strict: true }));
@@ -253,8 +287,11 @@ async function runImport({ importToDatabase = false, stockDefault = 0, csvPath =
       summary.unmatchedSpecificationPairs += normalized.unmatchedSpecificationPairs;
       try {
         await new Product(normalized.product).validate();
-      } catch {
+      } catch (error) {
         summary.skippedProductValidation += 1;
+        for (const field of Object.keys(error.errors || {})) {
+          summary.modelValidationFailures[field] = (summary.modelValidationFailures[field] || 0) + 1;
+        }
         summary.rejectedRows += 1;
         continue;
       }
@@ -282,7 +319,8 @@ async function main() {
   const options = parseArguments(process.argv.slice(2));
   const summary = await runImport({
     importToDatabase: options.import,
-    stockDefault: options.stockDefault === null ? 0 : options.stockDefault
+    stockDefault: options.stockDefault === null ? 0 : options.stockDefault,
+    argv: process.argv.slice(2)
   });
   console.log(`Mode: ${options.import ? 'database import' : 'dry-run only'}`);
   console.log(`Inventory: ${options.import ? options.stockDefault : 0} (synthetic; the source has no stock field)`);
@@ -292,7 +330,9 @@ async function main() {
 
 if (require.main === module) {
   main().catch((error) => {
-    console.error(`Product import stopped: ${error.message}`);
+    if (error instanceof safety.SafetyError) console.error(`Product import refused: ${error.message}`);
+    else if (!process.argv.includes('--import')) console.error(`Product dry-run stopped: ${error.message}`);
+    else console.error('Product import stopped; database and credential details were suppressed.');
     process.exitCode = 1;
   });
 }

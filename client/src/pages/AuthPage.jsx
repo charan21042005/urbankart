@@ -16,7 +16,9 @@ export default function AuthPage({ mode }) {
   const [localError, setLocalError] = useState('');
   const returnTo = safeReturnPath(location.state?.from);
 
+  // Reflect the selected auth mode in the browser tab title.
   useEffect(() => { document.title = `${registering ? 'Create account' : 'Sign in'} | UrbanKart`; }, [registering]);
+  // After successful auth, return to the safe in-app destination requested by the visitor.
   useEffect(() => { if (auth.isAuthenticated) navigate(returnTo, { replace: true }); }, [auth.isAuthenticated, navigate, returnTo]);
 
   const update = (field) => (event) => {

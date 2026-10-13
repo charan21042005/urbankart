@@ -1,10 +1,6 @@
-// 1. Import Mongoose to connect to the database
 const mongoose = require('mongoose');
-
-// 2. Load the secret variables from the .env file (e.g. MONGODB_URI)
-require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
-
-// 3. Import our Product model so we can insert data into the 'products' collection
+const crypto = require('node:crypto');
+const safety = require('../scripts/databaseSafety');
 const Product = require('../models/Product');
 
 // 4. Create an array of mock (seed) data. This provides realistic data for our frontend to use during development.
@@ -213,29 +209,58 @@ const seedProducts = [
   }
 ];
 
-// 5. Define an async function to execute the seed operation
-async function seedDatabase() {
+function sampleProductId(product) {
+  const hex = crypto.createHash('sha256')
+    .update('urbankart:day1-sample:' + product.category + ':' + product.name)
+    .digest('hex')
+    .slice(0, 24);
+  return new mongoose.Types.ObjectId(hex);
+}
+
+async function seedDatabase(argv = process.argv.slice(2)) {
+  let connected = false;
   try {
-    // Connect to the database
-    await mongoose.connect(process.env.MONGODB_URI);
-    
-    // 6. IDEMPOTENCY: Clear ONLY the products collection before inserting.
-    // This allows us to run this script 100 times without duplicating the data 100 times.
-    console.log("Clearing existing products...");
-    await Product.deleteMany({});
+    mongoose.set('autoCreate', false);
+    mongoose.set('autoIndex', false);
+    const target = await safety.connectAfterPreflight({
+      mode: 'local-write',
+      argv,
+      connect: (uri) => mongoose.connect(uri, {
+        autoCreate: false,
+        autoIndex: false,
+        serverSelectionTimeoutMS: 10_000
+      })
+    });
+    connected = true;
+    const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+    safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
+    const info = await mongoose.connection.db.listCollections({ name: Product.collection.name }).next();
+    if (!info?.options?.validator?.$jsonSchema) {
+      throw new safety.SafetyError('Initialize the local products validator before running the sample seed.');
+    }
 
-    // 7. Insert all 18 products into the database at once.
-    console.log(`Inserting ${seedProducts.length} sample products...`);
-    const inserted = await Product.insertMany(seedProducts);
-
-    console.log(`✅ Success! ${inserted.length} products inserted.`);
-  } catch (err) {
-    console.error("❌ Seeding Error:", err.message);
+    const operations = seedProducts.map((product) => {
+      const _id = sampleProductId(product);
+      return { updateOne: { filter: { _id }, update: { $setOnInsert: { ...product, _id } }, upsert: true } };
+    });
+    const result = await Product.bulkWrite(operations, { ordered: false });
+    process.stdout.write(JSON.stringify({
+      result: 'local sample seed complete',
+      database: target.databaseName,
+      sampleRows: seedProducts.length,
+      inserted: result.upsertedCount,
+      alreadyPresent: seedProducts.length - result.upsertedCount
+    }, null, 2) + '\n');
+  } catch (error) {
+    if (error instanceof safety.SafetyError) process.stderr.write('Sample seed refused: ' + error.message + '\n');
+    else process.stderr.write('Sample seed failed; database and credential details were suppressed.\n');
+    process.exitCode = 1;
   } finally {
-    // 8. Disconnect from the database so the terminal prompt returns
-    mongoose.disconnect();
+    if (connected || mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect().catch(() => { process.exitCode = 1; });
+    }
   }
 }
 
-// 9. Execute the seed operation
-seedDatabase();
+if (require.main === module) seedDatabase();
+module.exports = { seedProducts, sampleProductId, seedDatabase };

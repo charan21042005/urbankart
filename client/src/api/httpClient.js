@@ -43,6 +43,8 @@ export const httpClient = axios.create({
   headers: { Accept: 'application/json', 'Content-Type': 'application/json' }
 });
 
+// This shared interceptor attaches the current in-memory JWT to protected API
+// requests, so individual pages do not duplicate token handling.
 httpClient.interceptors.request.use((config) => {
   if (config.skipAuth) return config;
   const token = getAccessToken();

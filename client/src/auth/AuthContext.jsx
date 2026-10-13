@@ -15,10 +15,14 @@ function readAuthResponse(payload) {
 }
 
 export function AuthProvider({ children }) {
+  // Global auth state holds the public user and auth status; the bearer token
+  // stays in memory and is consumed by the shared API request interceptor.
   const [auth, setAuth] = useState({ status: 'initializing', user: null, error: null, sessionRevision: getTokenRevision() });
   const actionLock = useRef(false);
 
   useEffect(() => {
+    // On mount, discard any stale in-memory token and subscribe to 401-driven
+    // invalidation events; this deliberately does not restore auth from storage.
     // A memory-only token cannot survive a page reload, so initialization never trusts a stored string.
     clearAccessToken();
     setAuth((current) => current.status === 'initializing'

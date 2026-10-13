@@ -29,8 +29,10 @@ export default function CheckoutPage() {
   const [attemptKey, setAttemptKey] = useState(null);
   const [state, setState] = useState({ kind: 'ready', message: '' });
 
+  // Label the checkout route in the browser tab.
   useEffect(() => { document.title = 'Checkout | UrbanKart'; }, []);
 
+  // Reconcile a saved same-user attempt on entry; never create a new key to guess an outcome.
   useEffect(() => {
     if (!auth.isAuthenticated || !auth.user?.id) return;
     const existing = readPendingKey(auth.user.id);

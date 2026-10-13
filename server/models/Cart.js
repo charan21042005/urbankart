@@ -29,6 +29,7 @@ const cartSchema = new mongoose.Schema({
       required: true, 
       // Minimum is 1 (you can't add 0 items to a cart)
       min: 1, 
+      max: 2_147_483_647,
       // Custom validation ensures you can only add whole items (e.g. 1, 2, 3), not fractions (1.5)
       validate: {
         validator: Number.isInteger,
@@ -36,7 +37,13 @@ const cartSchema = new mongoose.Schema({
       }
     }
   }]
-});
+}, { timestamps: true });
+
+cartSchema.path('items').validate((items) => items.length <= 100, 'A cart may contain at most 100 distinct products.');
+
+// One cart per account; the TTL index removes abandoned local/production cart
+// documents 30 days after their last update. Orders remain independently stored.
+cartSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 2_592_000, name: 'ttl_carts_updated_at_30d' });
 
 // 3. Compile the schema into a Mongoose model named 'Cart' and export it
 module.exports = mongoose.model('Cart', cartSchema);

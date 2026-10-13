@@ -75,7 +75,7 @@ router.post('/login', async (req, res) => {
 
   try {
     const user = await User.findOne({ email });
-    const passwordMatches = user?.passwordHash
+    const passwordMatches = user?.isActive !== false && user?.passwordHash
       ? await bcrypt.compare(password, user.passwordHash)
       : false;
     if (!user || !passwordMatches) {

@@ -14,6 +14,11 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
+// Schema/index changes are applied only by the explicitly gated local initializer
+// or a reviewed deployment migration, never as a side effect of server startup.
+mongoose.set('autoCreate', false);
+mongoose.set('autoIndex', false);
+
 mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log('MongoDB connected via Mongoose');

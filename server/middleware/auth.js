@@ -56,8 +56,8 @@ async function loadCurrentUser(req, res, next) {
   }
 
   try {
-    const user = await User.findById(req.auth.userId).select('role');
-    if (!user) {
+    const user = await User.findById(req.auth.userId).select('name email role isActive');
+    if (!user || user.isActive === false) {
       return res.status(401).json({ status: 'error', message: 'Account is unavailable.' });
     }
     req.currentUser = user;

@@ -105,6 +105,31 @@ test('product list rejects malformed pagination and clamps large page sizes', as
   assert.equal(response.headers.get('x-page-size'), '100');
 });
 
+test('catalog search uses the indexed text contract and validates sort options', async (t) => {
+  let observedFilter;
+  let observedSort;
+  t.mock.method(Product, 'find', (filter) => {
+    observedFilter = filter;
+    return { sort(value) { observedSort = value; return this; }, skip() { return this; }, limit() { return this; }, then(resolve, reject) { return Promise.resolve([]).then(resolve, reject); } };
+  });
+  t.mock.method(Product, 'countDocuments', async () => 0);
+  const response = await request('/api/products?search=wireless%20keyboard&category=Electronics&sort=price-asc');
+  assert.equal(response.status, 200);
+  assert.deepEqual(observedFilter, { category: 'Electronics', $text: { $search: 'wireless keyboard' } });
+  assert.deepEqual(observedSort, { price: 1, score: { $meta: 'textScore' }, _id: 1 });
+  assert.equal((await request('/api/products?sort=drop-table')).status, 400);
+});
+
+test('catalog categories are read from the current database contents', async (t) => {
+  t.mock.method(Product, 'distinct', async (field) => {
+    assert.equal(field, 'category');
+    return ['Home', 'Electronics', 'Home', null];
+  });
+  const response = await request('/api/products/categories');
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), ['Electronics', 'Home']);
+});
+
 test('product lookup validates ObjectIds and returns not found for valid missing IDs', async (t) => {
   t.mock.method(Product, 'findById', async () => null);
   assert.equal((await request('/api/products/not-an-object-id')).status, 400);
@@ -171,6 +196,171 @@ test('login verifies password hashes and returns generic credential errors', asy
   });
   assert.equal(rejected.status, 401);
   assert.equal((await rejected.json()).message, 'Invalid email or password.');
+
+  user.isActive = false;
+  const closedAccount = await request('/api/auth/login', {
+    method: 'POST', body: JSON.stringify({ email: 'USER@example.com', password: 'correct-password' })
+  });
+  assert.equal(closedAccount.status, 401);
+});
+
+test('customers can read and update only their public profile fields', async (t) => {
+  const userId = new mongoose.Types.ObjectId();
+  const current = { _id: userId, name: 'Before', email: 'profile@example.test', role: 'customer', passwordHash: 'must-not-leak', async save() { return this; } };
+  t.mock.method(User, 'findById', () => ({ select: async () => current }));
+  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}` };
+  const read = await request('/api/users/me', { headers });
+  assert.equal(read.status, 200);
+  assert.deepEqual(await read.json(), { id: userId.toString(), name: 'Before', email: 'profile@example.test', role: 'customer' });
+  assert.equal((await request('/api/users/me', { method: 'PATCH', headers, body: JSON.stringify({ role: 'admin' }) })).status, 400);
+  const updated = await request('/api/users/me', { method: 'PATCH', headers, body: JSON.stringify({ name: 'After' }) });
+  assert.equal(updated.status, 200);
+  assert.equal((await updated.json()).name, 'After');
+  assert.equal((await request('/api/users/me')).status, 401);
+});
+
+test('customer management routes require a current database admin role', async (t) => {
+  const userId = new mongoose.Types.ObjectId();
+  t.mock.method(User, 'findById', () => ({ select: async () => ({ _id: userId, role: 'customer', isActive: true }) }));
+  const customerHeaders = { authorization: `Bearer ${makeToken('admin', userId.toString())}` };
+  assert.equal((await request('/api/users')).status, 401);
+  assert.equal((await request('/api/users', { headers: customerHeaders })).status, 403);
+});
+
+test('admin customer creation always creates a customer and never returns its password hash', async (t) => {
+  const adminId = new mongoose.Types.ObjectId();
+  const adminHeaders = { authorization: `Bearer ${makeToken('admin', adminId.toString())}` };
+  let created;
+  t.mock.method(User, 'findById', () => ({ select: async () => ({ _id: adminId, role: 'admin', isActive: true }) }));
+  const create = t.mock.method(User, 'create', async (payload) => {
+    created = { ...payload, _id: new mongoose.Types.ObjectId(), isActive: true };
+    return created;
+  });
+
+  const escalation = await request('/api/users', {
+    method: 'POST', headers: adminHeaders,
+    body: JSON.stringify({ name: 'New User', email: 'new@example.test', password: 'long-password', role: 'admin' })
+  });
+  assert.equal(escalation.status, 400);
+  assert.equal(create.mock.callCount(), 0);
+
+  const response = await request('/api/users', {
+    method: 'POST', headers: adminHeaders,
+    body: JSON.stringify({ name: ' New User ', email: 'NEW@example.test', password: 'long-password' })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 201);
+  assert.equal(created.role, 'customer');
+  assert.equal(created.name, 'New User');
+  assert.equal(created.email, 'new@example.test');
+  assert.equal(await bcrypt.compare('long-password', created.passwordHash), true);
+  assert.equal(body.user.passwordHash, undefined);
+});
+
+test('admin customer listing and lookup return only safe customer fields', async (t) => {
+  const adminId = new mongoose.Types.ObjectId();
+  const customerId = new mongoose.Types.ObjectId();
+  const adminHeaders = { authorization: `Bearer ${makeToken('admin', adminId.toString())}` };
+  const customer = { _id: customerId, name: 'Customer', email: 'customer@example.test', role: 'customer', isActive: true, passwordHash: 'never-return' };
+  t.mock.method(User, 'findById', () => ({ select: async () => ({ _id: adminId, role: 'admin', isActive: true }) }));
+  t.mock.method(User, 'find', () => ({
+    select() { return this; }, sort() { return this; }, skip() { return this; }, limit() { return this; },
+    lean: async () => [customer]
+  }));
+  t.mock.method(User, 'countDocuments', async () => 1);
+  t.mock.method(User, 'findOne', () => ({
+    select() { return this; }, lean: async () => customer
+  }));
+
+  const list = await request('/api/users?page=1&limit=10', { headers: adminHeaders });
+  assert.equal(list.status, 200);
+  assert.deepEqual((await list.json()).users[0], {
+    id: customerId.toString(), name: 'Customer', email: 'customer@example.test', role: 'customer', isActive: true
+  });
+  assert.equal((await request('/api/users/not-an-id', { headers: adminHeaders })).status, 400);
+  const read = await request(`/api/users/${customerId}`, { headers: adminHeaders });
+  assert.equal(read.status, 200);
+  assert.equal((await read.json()).user.passwordHash, undefined);
+});
+
+test('admin can update customer profile fields but cannot change roles or account state', async (t) => {
+  const adminId = new mongoose.Types.ObjectId();
+  const customerId = new mongoose.Types.ObjectId();
+  const adminHeaders = { authorization: `Bearer ${makeToken('admin', adminId.toString())}` };
+  const customer = {
+    _id: customerId, name: 'Before', email: 'before@example.test', role: 'customer', isActive: true,
+    async save() { return this; }
+  };
+  t.mock.method(User, 'findById', () => ({ select: async () => ({ _id: adminId, role: 'admin', isActive: true }) }));
+  const findOne = t.mock.method(User, 'findOne', async () => customer);
+  const forbidden = await request(`/api/users/${customerId}`, {
+    method: 'PATCH', headers: adminHeaders, body: JSON.stringify({ role: 'admin' })
+  });
+  assert.equal(forbidden.status, 400);
+  assert.equal(findOne.mock.callCount(), 0);
+  const updated = await request(`/api/users/${customerId}`, {
+    method: 'PATCH', headers: adminHeaders, body: JSON.stringify({ name: 'After' })
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(customer.name, 'After');
+  assert.equal(customer.role, 'customer');
+});
+
+test('admin customer deletion anonymizes and deactivates while retaining the original user ID', async (t) => {
+  const adminId = new mongoose.Types.ObjectId();
+  const customerId = new mongoose.Types.ObjectId();
+  const adminHeaders = { authorization: `Bearer ${makeToken('admin', adminId.toString())}` };
+  const customer = {
+    _id: customerId, name: 'Customer', email: 'customer@example.test', role: 'customer',
+    passwordHash: 'old-hash', isActive: true, async save() { return this; }
+  };
+  t.mock.method(User, 'findById', () => ({ select: async () => ({ _id: adminId, role: 'admin', isActive: true }) }));
+  t.mock.method(User, 'findOne', async () => customer);
+  t.mock.method(bcrypt, 'hash', async () => 'replacement-hash');
+  const response = await request(`/api/users/${customerId}`, { method: 'DELETE', headers: adminHeaders });
+  assert.equal(response.status, 200);
+  assert.equal(customer._id, customerId);
+  assert.equal(customer.name, 'Deleted account');
+  assert.equal(customer.email, `deleted-${customerId}@urbankart.invalid`);
+  assert.equal(customer.passwordHash, 'replacement-hash');
+  assert.equal(customer.isActive, false);
+});
+
+test('customers can close only their own account and the tombstone blocks old tokens', async (t) => {
+  const userId = new mongoose.Types.ObjectId();
+  const current = {
+    _id: userId, name: 'Before', email: 'close@example.test', role: 'customer',
+    passwordHash: 'old-hash', isActive: true, async save() { return this; }
+  };
+  t.mock.method(User, 'findById', () => ({ select: async () => current }));
+  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}` };
+
+  assert.equal((await request('/api/users/me', { method: 'DELETE' })).status, 401);
+  assert.equal((await request(`/api/users/${new mongoose.Types.ObjectId()}`, { method: 'DELETE', headers })).status, 403);
+  assert.equal(current.isActive, true, 'customers cannot use the administrator customer-management route');
+  const closed = await request('/api/users/me', { method: 'DELETE', headers });
+  assert.equal(closed.status, 200);
+  assert.equal(current.name, 'Deleted account');
+  assert.equal(current.email, `deleted-${userId.toString()}@urbankart.invalid`);
+  assert.notEqual(current.passwordHash, 'old-hash');
+  assert.equal(current.isActive, false);
+  assert.equal((await request('/api/users/me', { headers })).status, 401);
+  assert.equal((await request('/api/users/me', { method: 'DELETE', headers })).status, 401);
+});
+
+test('administrator self-service account closure is rejected without mutation', async (t) => {
+  const userId = new mongoose.Types.ObjectId();
+  const current = {
+    _id: userId, name: 'Admin', email: 'admin@example.test', role: 'admin', isActive: true,
+    async save() { throw new Error('must not save'); }
+  };
+  t.mock.method(User, 'findById', () => ({ select: async () => current }));
+  const response = await request('/api/users/me', {
+    method: 'DELETE', headers: { authorization: `Bearer ${makeToken('admin', userId.toString())}` }
+  });
+  assert.equal(response.status, 409);
+  assert.equal(current.isActive, true);
+  assert.equal(current.email, 'admin@example.test');
 });
 
 test('product writes reject missing or malformed tokens and customer tokens', async (t) => {
@@ -568,8 +758,9 @@ test('specification parser safely accepts known values and ignores value-only en
 test('import mode requires an explicit synthetic stock policy', () => {
   assert.equal(parseArguments(['--dry-run']).import, false);
   assert.throws(() => parseArguments(['--import']), /requires --stock-default/);
-  assert.equal(parseArguments(['--import', '--stock-default', '0']).stockDefault, 0);
-  assert.throws(() => parseArguments(['--import', '--stock-default', '2147483648']), /BSON int32/);
+  assert.throws(() => parseArguments(['--import', '--stock-default', '0']), /requires --confirm-local-db/);
+  assert.equal(parseArguments(['--import', '--stock-default', '0', '--confirm-local-db', 'urbankart_local_demo']).stockDefault, 0);
+  assert.throws(() => parseArguments(['--import', '--stock-default', '2147483648', '--confirm-local-db', 'urbankart_local_demo']), /BSON int32/);
 });
 
 test('JWT expiry configuration rejects zero and unsafe durations', () => {
