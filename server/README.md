@@ -65,7 +65,7 @@ The CSV importer applies the same complete local-member gate before its bounded 
 
 ## Dataset import
 
-The local ignored file `seed/data/flipkart_com-ecommerce_sample.csv` is the PromptCloudHQ Flipkart Products dataset. The source page is <https://www.kaggle.com/datasets/PromptCloudHQ/flipkart-products>; the Kaggle page did not expose a verifiable license during this review, so redistribution rights remain unverified. The importer requires `uniq_id`, `product_name`, `product_category_tree`, and `discounted_price`; it maps specifications/brand to `{ key, value }`, uses deterministic IDs, validates rows, and writes bounded batches. The source has no stock or explicit currency field. A write therefore requires an explicit inventory policy such as `--stock-default 0` and does not add a currency field.
+The local ignored file `seed/data/flipkart_com-ecommerce_sample.csv` is the PromptCloudHQ Flipkart Products dataset. The Kaggle dataset page declares [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); record its source and transformation attribution and keep the raw CSV out of Git. The declaration does not establish the uploader's authority over retailer descriptions, trademarks, or linked image assets. Overall redistribution clearance remains AMBER; see [`docs/dataset-provenance.md`](../docs/dataset-provenance.md). The importer requires `uniq_id`, `product_name`, `product_category_tree`, and `discounted_price`; it maps specifications/brand to `{ key, value }`, uses deterministic IDs, validates rows, and writes bounded batches. The source has no stock or explicit currency field. A write therefore requires an explicit inventory policy such as `--stock-default 0` and does not add a currency field.
 
 ```powershell
 npm run import:products -- --dry-run
@@ -77,7 +77,7 @@ The latest local dry run parsed 20,000 rows: 19,159 valid unique normalized prod
 
 ### Persistent local development catalog
 
-A separate local development catalog is stored outside the repository and OneDrive at `%LOCALAPPDATA%\UrbanKart\mongodb-day1-4-dev`. It uses replica set `ukLocalDev` on loopback port `27020`, database `urbankart_local_dev`, and currently contains 19,159 imported products. The importer assigned stock `0` because the source has no inventory field; the catalog is browseable but cannot support a purchase until a separate, clearly synthetic inventory policy is chosen. The Kaggle redistribution license remains unverified, so this copy stays local and must not be committed or redistributed.
+A separate local development catalog is stored outside the repository and OneDrive at `%LOCALAPPDATA%\UrbanKart\mongodb-day1-4-dev`. It uses replica set `ukLocalDev` on loopback port `27020`, database `urbankart_local_dev`, and currently contains 19,159 imported products. The importer assigned stock `0` because the source has no inventory field; the catalog is browseable but cannot support a purchase until a separate, clearly synthetic inventory policy is chosen. The Kaggle page declares CC BY-SA 4.0, while overall redistribution clearance remains AMBER because uploader authority and third-party retailer content/image rights are not fully verified. Keep the CSV and retailer images out of Git; see [`docs/dataset-provenance.md`](../docs/dataset-provenance.md).
 
 To start MongoDB in a PowerShell window:
 

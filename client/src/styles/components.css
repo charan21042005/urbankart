@@ -195,6 +195,14 @@
   letter-spacing: 0.06em;
 }
 
+.site-footer__sources { position: relative; color: var(--color-ink-soft); font-size: var(--text-xs); }
+.site-footer__sources summary { min-height: 2.75rem; display: inline-flex; align-items: center; cursor: pointer; text-decoration: underline; text-underline-offset: .2rem; }
+.site-footer__sources summary:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 3px; }
+.site-footer__sources[open] .site-footer__sources-panel { position: absolute; z-index: 6; bottom: calc(100% + .5rem); left: 0; width: min(30rem, 85vw); padding: 1rem 1.1rem; border: 1px solid var(--color-line); background: var(--color-paper); box-shadow: var(--shadow-soft); }
+.site-footer__sources-panel p { margin: 0 0 .75rem; color: var(--color-ink-soft); font-family: var(--font-body); font-size: var(--text-xs); font-style: normal; line-height: 1.6; }
+.site-footer__sources-panel p:last-child { margin-bottom: 0; }
+.site-footer__sources-panel a { color: var(--color-brand-dark); text-underline-offset: .15rem; }
+
 .not-found-page {
   display: grid;
   min-height: 65vh;

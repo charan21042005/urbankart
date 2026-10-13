@@ -205,7 +205,7 @@ Instead of calculating similarity dynamically, an offline process computes relat
 
 ## 🗺️ 15. Project Roadmap
 *   **Phase 1: Foundation & Database Modeling - Complete**
-*   **Phase 2: Core Product APIs and dataset import - Complete; source license remains unverified**
+*   **Phase 2: Core Product APIs and dataset import - Complete; dataset page declares CC BY-SA 4.0, third-party rights remain under review**
 *   **Phase 3: Authentication and Security - Implemented, including customer self-closure**
 *   **Phase 4: Cart, Checkout, Transactions and Idempotency - Local replica-set scenarios verified**
 *   **Phase 5: Transactions and Concurrency Control - Local replica-set scenarios verified**
@@ -229,7 +229,7 @@ Instead of calculating similarity dynamically, an offline process computes relat
 | Cart & Checkout APIs | Implemented with user-scoped idempotency and reconciliation |
 | React Frontend | Implemented; fresh browser visual and purchase journey verification is pending |
 | Customer account management | Customer self-closure and admin-only customer CRUD are implemented; admin CRUD operations are covered by offline tests. Admin roles remain provisioned out of band. |
-| Dataset license and redistribution | Unverified; do not redistribute the raw CSV until rights are clarified |
+| Dataset declaration and redistribution | Kaggle declares CC BY-SA 4.0 (`DECLARED_CC_BY_SA_4_0`); overall clearance remains AMBER because uploader authority and retailer descriptions, marks, and image rights are not fully verified. Keep the raw CSV out of Git. See [dataset provenance](docs/dataset-provenance.md). |
 | Fresh browser end-to-end QA | Pending; Chrome, Edge, and Brave could not render in this environment; no fresh screenshots |
 | Atomic Inventory Updates | Transaction-backed; local replica-set scenarios verified |
 | Reviews API/UI, recommendation generation, analytics | 📅 Later roadmap work; not part of the verified Days 1–4 storefront |
@@ -391,6 +391,10 @@ Stage H follow-up at baseline `81a0d588a8bbb04d0f91f5ddefca6bd860cb01cb` fixed t
 
 ## 25. License
 This project is licensed under the MIT License. See the `LICENSE` file for full details.
+
+## Dataset Licence and Attribution Follow-up (2026-10-13)
+
+The PromptCloudHQ [Flipkart Products dataset on Kaggle](https://www.kaggle.com/datasets/PromptCloudHQ/flipkart-products) declares [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) (`DECLARED_CC_BY_SA_4_0`). The overall redistribution assessment remains **AMBER — declared licence, scope/third-party rights not fully verified**. The storefront footer's “About & data sources” disclosure credits the dataset, links the source and licence, and summarizes transformations. The CSV's filename, metadata, and header were inspected locally; the importer omits its image URLs and no retailer image was downloaded. Product description, trademark, and image rights remain separate open questions. ShareAlike, substantial database extraction, and uploader-authority limits are documented in [`docs/dataset-provenance.md`](docs/dataset-provenance.md). The raw CSV remains out of Git. This project note is not legal advice or a guarantee of non-infringement.
 
 ## Current Days 1–4 Verification (2026-10-13)
 
