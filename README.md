@@ -115,6 +115,7 @@ The flow of data through UrbanKart prioritizes separation of concerns and databa
 ### Checkout Flow (Backend Route Implemented; Client Checkout Not Implemented)
 `Client Cart` → `POST /api/cart/checkout` → `Validate Stock and Read Current Prices` → `Create Order (Snapshot Pattern)` → `Transactional Inventory Deduction` → `Clear Cart`
 The route is verified from source; live checkout behavior is not implied. See [the client API contract and Stage E review](client/README.md).
+Stage F preflight found no isolated local MongoDB: the configured destination is Atlas, no local listener was present, and the Docker engine was unavailable. No live API or checkout verification ran; see the [Stage F verification notes](client/README.md#stage-f-verification).
 
 ### Recommendation Flow (📅 Planned logic, Schema ✅ Implemented)
 `Offline Job` → `Compute Similarity` → `Overwrite recommendations collection` → `Client queries O(1) Materialized View`
