@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { getCart } from '../api/cartApi.js';
+import { addCartItem, clearCart as clearCartRequest, getCart, removeCartItem, setCartItemQuantity } from '../api/cartApi.js';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 const CartContext = createContext(null);
@@ -9,6 +9,8 @@ export function CartProvider({ children }) {
   const auth = useAuth();
   const [state, setState] = useState({ status: 'idle', ownerId: null, sessionRevision: null, data: emptyCart, error: null });
   const requestId = useRef(0);
+  const mutationLock = useRef(false);
+  const [mutationState, setMutationState] = useState({ busy: false, error: null });
   const currentUserId = auth.isAuthenticated ? auth.user.id : null;
 
   const refresh = useCallback(async ({ signal } = {}) => {
@@ -29,10 +31,37 @@ export function CartProvider({ children }) {
     }
   }, [auth.isAuthenticated, auth.sessionRevision, currentUserId]);
 
+  const mutate = useCallback(async (request) => {
+    if (!auth.isAuthenticated || !currentUserId) return { ok: false, error: new Error('Sign in before updating your cart.') };
+    if (mutationLock.current) return { ok: false, error: new Error('A cart update is already in progress.') };
+    mutationLock.current = true;
+    setMutationState({ busy: true, error: null });
+    try {
+      await request();
+      const refreshed = await refresh();
+      if (!refreshed) return { ok: false, error: new Error('The cart update could not be confirmed. Review your cart before trying again.') };
+      setMutationState({ busy: false, error: null });
+      return { ok: true, error: null };
+    } catch (error) {
+      setMutationState({ busy: false, error });
+      return { ok: false, error };
+    } finally {
+      mutationLock.current = false;
+      setMutationState((current) => ({ ...current, busy: false }));
+    }
+  }, [auth.isAuthenticated, currentUserId, refresh]);
+
+  const addItem = useCallback((productId, quantity = 1) => mutate(() => addCartItem(productId, quantity)), [mutate]);
+  const updateItem = useCallback((productId, quantity) => mutate(() => setCartItemQuantity(productId, quantity)), [mutate]);
+  const removeItem = useCallback((productId) => mutate(() => removeCartItem(productId)), [mutate]);
+  const clearCartAction = useCallback(() => mutate(() => clearCartRequest()), [mutate]);
+  const clearMutationError = useCallback(() => setMutationState((current) => ({ ...current, error: null })), []);
+
   useEffect(() => {
     const ownRequest = ++requestId.current;
     if (!auth.isAuthenticated || !currentUserId || auth.isInitializing || auth.isSubmitting) {
       setState({ status: 'idle', ownerId: null, sessionRevision: null, data: emptyCart, error: null });
+      if (!auth.isAuthenticated || !currentUserId) setMutationState({ busy: false, error: null });
       return () => { requestId.current += 1; };
     }
     const controller = new AbortController();
@@ -55,7 +84,12 @@ export function CartProvider({ children }) {
     const price = Number(item.product?.price);
     return sum + (Number.isFinite(price) && price >= 0 ? price * item.quantity : 0);
   }, 0);
-  const value = useMemo(() => ({ cart, status, error, itemCount, total, refresh }), [cart, status, error, itemCount, total, refresh]);
+  const value = useMemo(() => ({
+    cart, status, error, itemCount, total, refresh,
+    isMutating: mutationState.busy,
+    mutationError: mutationState.error,
+    addItem, updateItem, removeItem, clearCart: clearCartAction, clearMutationError
+  }), [cart, status, error, itemCount, total, refresh, mutationState, addItem, updateItem, removeItem, clearCartAction, clearMutationError]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

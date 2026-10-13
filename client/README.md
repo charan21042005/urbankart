@@ -1,6 +1,6 @@
 # UrbanKart Client
 
-React frontend for the UrbanKart e-commerce project. The Stage A editorial visual foundation remains in place; Stage B adds reusable authentication and server-backed cart state without adding catalog, cart-editing, or checkout screens.
+React storefront for the UrbanKart e-commerce project. Stage A's editorial paper, ink, rust, and olive design system remains the visual foundation. Stage B supplies shared API, authentication, and cart state. Stage C connects catalog, product detail, login/registration, and cart editing screens to the existing backend.
 
 ## Local setup
 
@@ -12,35 +12,41 @@ npm install
 npm run dev
 ```
 
-Vite prints the local URL, normally `http://localhost:5173`. Create a production build with `npm run build`, inspect it using `npm run preview`, and run the frontend tests using `npm test`.
+Vite prints the local URL, normally `http://localhost:5173`. The frontend scripts are `npm run dev`, `npm run build`, `npm run preview`, and `npm test`.
 
 ## API configuration
 
-Set the public browser API base URL in `client/.env.local` when the backend is not using the default:
+The development default is same-origin `/api`; Vite proxies those requests to `http://localhost:5000`, avoiding browser CORS during local development. Set `VITE_API_BASE_URL` in `client/.env.local` only when using another API base URL:
 
 ```env
 VITE_API_BASE_URL=http://localhost:5000/api
 ```
 
-The default is `http://localhost:5000/api`. The URL already includes `/api`; API modules append paths such as `/auth/login` and `/cart`. Vite-exposed `VITE_` variables are public. Never put passwords, JWT secrets, database URIs, or other private values in them.
+The URL includes `/api`; the API modules append route paths. The current Express server does not configure CORS, so a separately hosted frontend must use same-origin routing or a deployment proxy; a direct cross-origin URL will need server-side CORS support. Vite-exposed `VITE_` values are public. Never put passwords, JWT secrets, database URIs, or other private values in them.
 
-## Stage B architecture
+## Stage C routes and verified backend contract
 
-- `src/api/httpClient.js` owns the shared Axios instance, timeout, bearer-token request interceptor, API error normalization, and authenticated-session invalidation handling.
-- `src/api/tokenStore.js` abstracts access-token storage. The current policy is memory-only: the token is lost on page refresh, so a refresh starts signed out. This avoids persistent browser storage but does not protect a running page from JavaScript injected by an XSS vulnerability.
-- `src/api/sessionEvents.js` relays invalid-session events without coupling Axios to React.
-- `src/api/authApi.js` calls the existing `POST /api/auth/register` and `POST /api/auth/login` endpoints. Public registration sends only name, email, and password; the server assigns the customer role.
-- `src/api/cartApi.js` reads `GET /api/cart` and normalizes the populated product reference.
+- `/` loads the catalogue from `GET /api/products?page=&limit=&search=&category=`. `page` and `limit` must be positive integers; the server defaults to page 1 and limit 20 and caps the limit at 100. Search is a case-insensitive match against product name or description; category is an exact category match. Pagination totals come from `X-Total-Count`, `X-Page`, `X-Page-Size`, and `X-Total-Pages` response headers. Search is debounced and filters are represented in the URL. Category choices are gathered from products returned by pages already visited because the backend has no category-list endpoint.
+- `/products/:id` loads one record with `GET /api/products/:id`. Product fields currently defined by the server are `_id`, `name`, optional `description`, numeric `price`, integer `stock`, `category`, `attributes` as `{ key, value }` pairs, and timestamps. There is no product-image field or currency field in the schema. Product artwork in the client is an abstract local placeholder, not a product photograph. Prices are displayed as the API number without a currency symbol.
+- `/login` calls `POST /api/auth/login` with `{ email, password }`; `/register` calls `POST /api/auth/register` with `{ name, email, password }`. Registration accepts a 1–100 character name, valid email up to 254 characters, and a password between 8 and 72 UTF-8 bytes. The server assigns the customer role and responds with a bearer token and public user data.
+- `/cart` uses authenticated `GET /api/cart`, which returns `items` with populated product references containing `name`, `price`, `stock`, and `category`. Cart editing uses `POST /api/cart/items`, `PATCH /api/cart/items/:productId`, `DELETE /api/cart/items/:productId`, and `DELETE /api/cart`. Successful edits are followed by a cart read to refresh populated details. Cart totals are client-side display estimates based on those returned product prices; no currency is supplied.
+- The frontend does not call the backend checkout or order-creation endpoint. Checkout, payment, delivery, inventory reservation, product image delivery, and server-provided currency formatting are outside Stage C.
+
+## Shared architecture and session behavior
+
+- `src/api/httpClient.js` owns the shared Axios instance, base URL, timeout, bearer-token request interceptor, API error normalization, and protected-session invalidation handling.
+- `src/api/tokenStore.js` keeps access tokens in memory only. A page refresh loses the token and starts signed out. The backend has no current-user/profile or refresh-token endpoint, so the client does not restore a session.
+- `src/api/productApi.js`, `src/api/authApi.js`, and `src/api/cartApi.js` contain endpoint calls. React pages use the existing API client and shared contexts rather than creating parallel state stores.
 - `src/auth/AuthContext.jsx` exposes login, registration, local logout, auth status, errors, and session invalidation through `useAuth()`.
-- `src/cart/CartContext.jsx` loads the authenticated user's server cart and exposes loading/empty/error status, item count, display total, and refresh through `useCart()`. It clears or hides state on logout/session changes and ignores stale responses.
-- Provider order in `src/main.jsx` is `AuthProvider` → `CartProvider` → `BrowserRouter`, so cart state can depend on authentication state.
+- `src/cart/CartContext.jsx` loads the authenticated user's cart and exposes state, derived item count and display subtotal, refresh, and guarded cart mutations through `useCart()`. It hides user-specific cart state after logout/session invalidation and ignores stale responses.
+- The server remains authoritative for authentication and stock validation. The UI does not make role-based access decisions. A cart mutation error is shown to the user; the client does not claim an item was added unless its mutation and refresh succeeded.
 
-The backend does not provide a current-user/profile endpoint, refresh-token flow, or HttpOnly-cookie authentication. The client therefore does not restore or validate a token across refreshes. The API's bearer-token response is kept only in memory. Local logout clears the token and user state without making a network request. A protected-request `401` invalidates only the session revision that made that request; login/registration `401` responses remain form-level errors. Requests are not automatically retried.
+## Tests and verification
 
-The client displays no role-based authorization decisions; server-side authorization remains authoritative. Cart contents and product prices come from `GET /api/cart`; no browser storage is treated as a cart database.
+```powershell
+npm test
+npm run build
+npm ls --depth=0
+```
 
-## Tests and current scope
-
-`npm test` runs the isolated Vitest/Testing Library suite in `src/test/`. HTTP tests use an in-process Axios adapter and context tests mock API modules. They do not contact the backend or MongoDB. The suite covers API URL/token headers, error mapping, login versus protected `401` behavior, auth lifecycle, registration and logout, cart loading/derived totals/error/empty states, stale-response handling, provider-hook boundaries, and existing route mounting.
-
-The current landing preview and not-found route remain. Product catalog/search/details, authentication forms/pages, cart editing UI, checkout, and order confirmation are not implemented in this stage. No real product data is embedded in the frontend.
+Vitest and Testing Library tests mock API modules at the frontend boundary. They cover the existing Stage B HTTP/auth/cart behavior plus Stage C catalogue loading, empty and error states, URL search/category filters, pagination, product-detail states and add-to-cart flow, auth forms, guest cart guidance, and cart editing. Tests do not connect to a backend or MongoDB and do not call checkout. A passing client test or build is not a live integration test.

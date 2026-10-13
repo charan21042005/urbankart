@@ -18,3 +18,23 @@ export async function getCart({ signal } = {}) {
   const { data } = await httpClient.get('/cart', { signal });
   return normalizeCart(data);
 }
+
+export async function addCartItem(productId, quantity) {
+  const { data } = await httpClient.post('/cart/items', { productId, quantity });
+  return data;
+}
+
+export async function setCartItemQuantity(productId, quantity) {
+  const { data } = await httpClient.patch(`/cart/items/${encodeURIComponent(productId)}`, { quantity });
+  return data;
+}
+
+export async function removeCartItem(productId) {
+  const { data } = await httpClient.delete(`/cart/items/${encodeURIComponent(productId)}`);
+  return data;
+}
+
+export async function clearCart() {
+  const { data } = await httpClient.delete('/cart');
+  return data;
+}

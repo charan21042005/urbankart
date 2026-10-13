@@ -1,7 +1,9 @@
 import PageContainer from '../components/layout/PageContainer.jsx';
 import { Link } from 'react-router';
+import { useEffect } from 'react';
 
 export default function NotFoundPage() {
+  useEffect(() => { document.title = 'Page not found | UrbanKart'; }, []);
   return (
     <PageContainer className="not-found-page">
       <p className="eyebrow"><span className="eyebrow__rule" /> PAGE NOT FOUND</p>
