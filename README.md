@@ -314,7 +314,23 @@ Beyond the current roadmap, potential future architectural extensions include:
     ```
     The server will boot on port 5000. Verify by visiting `http://localhost:5000/api/health`.
 
-## ⚖️ 24. License
+## 🧪 24. Stage G — Isolated local integration verification
+
+Stage G verified the application against a temporary local MongoDB 8.3 replica set. The task-created `mongod` process listened only on `127.0.0.1:27018`, used a separate disposable data directory and replica-set name `ukStageG`, and selected the isolated database `urbankart_stageg_local`. MongoDB `hello` confirmed a writable replica-set primary, and a transaction probe committed and removed its synthetic record. The temporary server and data directory were stopped and removed after verification.
+
+The repository-root `.env` was not changed or used as the database target. The backend and test processes received a process-scoped `MONGODB_URI` pointing to the loopback instance, plus explicit expected database, test database, isolation, and replica-set confirmation values. No Atlas or production endpoint was contacted.
+
+Against the live local Express API, Stage G verified health, product search/list and detail, malformed product-ID JSON errors, missing and invalid bearer-token responses, synthetic registration/login, authenticated cart read/add/update/remove/clear, and cleanup of the synthetic user/product fixtures. The actual Vite `/api` proxy to Express returned the same JSON statuses and bodies. When Express was intentionally stopped, the proxy returned HTTP 502; it recovered after Express restarted.
+
+The existing rollback test passed against a real replica set: stock returned from 5 to 5 after an injected order-write failure, no order persisted, the cart remained, and the session ended. The existing 20-request stock race test passed: one 201, nineteen 409 responses, final stock 0, one order, the successful cart cleared, and nineteen unsuccessful carts retained. A separate same-user duplicate check produced one 201 and one 409; a later replay returned 409 for an empty cart without creating another order. These results cover the tested fixtures and request patterns only; they do not establish behavior for every production workload.
+
+Browser QA used an isolated temporary Chrome profile and CSS viewports 390×844, 768×1024, and 1440×1000. The home, product detail, login, registration, guest cart, `/checkout`, and not-found routes were inspected at all three sizes. Search/category filtering, UI registration, adding the synthetic product, and authenticated cart quantity updates were exercised. No horizontal overflow or browser runtime/console errors were observed. Keyboard focus reached the visible skip link, and reduced-motion emulation applied. Screenshots were saved outside the repository under `%TEMP%\urbankart-stageg-screenshots-20261013`.
+
+Checkout remains unavailable in the client. The backend has no persistent user-scoped idempotency key or authenticated order reconciliation/history endpoint. A successful response followed by a duplicate empty-cart request is not a general replay guarantee; after an ambiguous 503 or lost response, a client still cannot determine whether an order committed. Do not enable checkout or automatically retry uncertain submissions until that backend contract and its replica-set integration tests are implemented.
+
+Offline verification also passed: client tests (37), production build, client dependency listing, server tests (44), and server dependency listing. The server unit tests use mocks and remain distinct from the live replica-set checks above.
+
+## ⚖️ 25. License
 This project is licensed under the MIT License. See the `LICENSE` file for full details.
 
 <div align="center">

@@ -77,3 +77,21 @@ npm ls --depth=0
 ```
 
 Vitest and Testing Library tests mock API modules at the frontend boundary. They cover the Stage B HTTP/auth/cart behavior, Stage C catalogue and route flows, and Stage D malformed-cart and unconfirmed-cart-mutation handling. Tests do not connect to a backend or MongoDB and do not call checkout. A passing client test or build is not a live integration test.
+
+## Stage G local integration verification
+
+Stage G supersedes the earlier no-live-database status above. For this verification only, an already-installed MongoDB Server 8.3 process ran as a single-node replica set on loopback port 27018 with a dedicated disposable data directory and database `urbankart_stageg_local`. The root `.env` was left unchanged; Express and test processes received a process-scoped local `MONGODB_URI`, and no Atlas or production host was contacted. The replica-set primary and a real transaction were verified before application tests. The temporary MongoDB process and data directory were removed afterward.
+
+The existing Express API was exercised with synthetic records: health, product list/search/detail, registration and login, authentication failures, and cart read/add/update/remove/clear. A real Vite development server on port 5182 proxied `/api` to Express on port 5000. Product search returned the synthetic fixture; unauthorized cart access preserved HTTP 401 and its JSON body; an invalid product ID preserved HTTP 400 and its JSON body. With Express stopped, the Vite proxy returned HTTP 502 and the storefront displayed its retryable catalogue-unavailable state. After Express restarted, retry recovered to the expected empty-catalogue state. Port 5181 was already occupied by a pre-existing Node process, so it was left untouched.
+
+An isolated Chrome profile inspected `/`, `/products/:id`, `/login`, `/register`, `/cart`, `/checkout`, and a not-found route at CSS viewports 390×844, 768×1024, and 1440×1000. Search and category filters displayed the live synthetic product. Registration, adding it to an authenticated cart, reading the cart, and increasing quantity were exercised through the UI. All checked routes had no horizontal overflow; no browser runtime exceptions or console errors were observed. The first keyboard Tab reached the visible skip link, and `prefers-reduced-motion: reduce` was honored. Screenshots were written outside the repository to `%TEMP%\urbankart-stageg-screenshots-20261013`.
+
+Real local-replica-set checkout results:
+
+- Rollback: starting stock 5; after a controlled order-write failure, stock remained 5, no failed order persisted, one cart item remained, and the session ended.
+- Last-unit race: 20 simultaneous requests produced one HTTP 201 and nineteen HTTP 409 responses; final stock was 0, one order persisted, the successful cart was cleared, and the other 19 carts remained.
+- Same-user duplicate requests: two simultaneous requests produced one 201 and one 409; a sequential repeat returned 409 for the empty cart, with no second order. This demonstrates the tested empty-cart behavior, not persistent replay protection.
+
+The backend still has no persistent idempotency key scoped to a customer and no authenticated order lookup/reconciliation endpoint. Transaction-retry edge cases and ambiguous commit outcomes were not injected. A client cannot safely determine whether an order committed after a lost response or ambiguous 503, so checkout remains unavailable in the storefront and uncertain requests must not be automatically retried.
+
+The standard client tests (37) and production build passed; server tests (44) passed. Those offline tests mock API/database behavior and do not establish real MongoDB behavior. The rollback and concurrency results above came from the separate, temporary replica-set database and are bounded to those test scenarios.
