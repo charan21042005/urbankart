@@ -109,6 +109,19 @@ async function run() {
     assert.equal((await Cart.findById(firstCart._id).lean()).items.length, 1,
       'conflict must preserve the changed cart');
 
+    const insufficientUser = await user(6);
+    const insufficientProduct = await product(1);
+    const insufficientCart = await cartFor(insufficientUser, insufficientProduct, 2);
+    const insufficientKey = `uk-stage-h-${crypto.randomUUID()}`;
+    const insufficient = await checkoutRequestWithKey(http.baseUrl, tokenFor(insufficientUser), insufficientKey);
+    assert.equal(insufficient.status, 409, 'insufficient stock must produce a conflict');
+    assert.equal(await Order.countDocuments({ customerId: insufficientUser._id }), 0,
+      'insufficient stock must not create an order');
+    assert.equal((await Product.findById(insufficientProduct._id).select('stock').lean()).stock, 1,
+      'insufficient stock must remain unchanged');
+    assert.equal((await Cart.findById(insufficientCart._id).lean()).items.length, 1,
+      'insufficient stock must preserve the cart');
+
     const droppedUser = await user(3);
     await cartFor(droppedUser, sharedProduct);
     const droppedKey = `uk-stage-h-${crypto.randomUUID()}`;
@@ -156,6 +169,7 @@ async function run() {
       replay: { firstStatus: 201, replayStatus: 200, sameOrder: true },
       userScopedKey: { crossUserLookup: 404, sameKeyIndependentAcrossUsers: true },
       changedCart: { status: 409, stockUnchanged: true, cartPreserved: true },
+      insufficientStock: { status: insufficient.status, orders: 0, stock: 1, cartItems: 1 },
       lostResponse: { responseDiscardedAfterRequestFlush: true, reconciliationStatus: 200 },
       concurrentSameKey: { statuses: sameKeyResponses.map((response) => response.status).sort(), orders: 1 },
       rollbackAfterOperationWrite: { status: failed.status, orders: 0, operations: 0, stock: 4, cartItems: 1 }

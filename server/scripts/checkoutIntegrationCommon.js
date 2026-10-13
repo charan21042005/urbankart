@@ -33,6 +33,9 @@ async function prepareIntegration(argv) {
       })
     });
     const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+    if (hello?.setName !== target.expectedReplicaSetName) {
+      throw new safety.SafetyError('Connected MongoDB replica-set identity does not match the explicitly selected local replica set.');
+    }
     const topology = requireTransactionTopology(hello, envTopology);
     await Promise.all([Product, User, Cart, Order, CheckoutOperation].map((model) => model.createIndexes()));
     const operationIndexes = await CheckoutOperation.collection.indexes();

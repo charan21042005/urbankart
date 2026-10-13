@@ -1,4 +1,5 @@
 const path = require('node:path');
+const net = require('node:net');
 const dotenv = require('dotenv');
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env'), quiet: true });
@@ -44,6 +45,38 @@ function getUriDatabaseName(uri) {
   return pathName;
 }
 
+function validateLocalReplicaSetUri(uri) {
+  if (typeof uri !== 'string' || !uri.startsWith('mongodb://')) {
+    throw new SafetyError('Integration tests require a mongodb:// URI with loopback hosts and an explicit replicaSet option.');
+  }
+  let parsed;
+  try { parsed = new URL(uri); }
+  catch { throw new SafetyError('Integration-test MongoDB URI is invalid.'); }
+  const authority = uri.slice('mongodb://'.length).split(/[/?#]/, 1)[0];
+  const hostList = authority.slice(authority.lastIndexOf('@') + 1);
+  if (!hostList) throw new SafetyError('Integration-test URI must identify a loopback MongoDB host.');
+  const hosts = hostList.split(',');
+  if (hosts.some((entry) => !entry)) throw new SafetyError('Integration-test URI contains an invalid host list.');
+  for (const entry of hosts) {
+    let hostname;
+    if (entry.startsWith('[')) {
+      const close = entry.indexOf(']');
+      if (close < 0) throw new SafetyError('Integration-test URI contains an invalid IPv6 host.');
+      hostname = entry.slice(1, close).toLowerCase();
+    } else {
+      hostname = entry.replace(/:\d+$/, '').toLowerCase();
+    }
+    const loopback = hostname === 'localhost' || hostname === '::1'
+      || (net.isIP(hostname) === 4 && hostname.split('.')[0] === '127');
+    if (!loopback) throw new SafetyError('Integration tests may connect only to localhost or a literal loopback IP address.');
+  }
+  const replicaSet = parsed.searchParams.get('replicaSet');
+  if (!replicaSet || parsed.searchParams.getAll('replicaSet').length !== 1) {
+    throw new SafetyError('Integration-test URI must explicitly select one local replica set with replicaSet=<name>.');
+  }
+  return { replicaSet };
+}
+
 function validatePreflight({ mode, argv, env }) {
   const isAudit = mode === 'audit';
   const flag = isAudit ? '--confirm-isolated-db' : '--confirm-test-db';
@@ -65,12 +98,17 @@ function validatePreflight({ mode, argv, env }) {
     if (!env.URBANKART_TEST_DB_NAME || env.URBANKART_TEST_DB_NAME !== configuredName) {
       throw new SafetyError('URBANKART_TEST_DB_NAME must exactly match the explicitly confirmed disposable test database.');
     }
-    if (!['replicaSet', 'sharded'].includes(env.URBANKART_TXN_TOPOLOGY_CONFIRMED)) {
-      throw new SafetyError('Before connecting, set URBANKART_TXN_TOPOLOGY_CONFIRMED to replicaSet or sharded only after verifying topology in Atlas.');
+    if (env.URBANKART_TXN_TOPOLOGY_CONFIRMED !== 'replicaSet') {
+      throw new SafetyError('Local integration tests require URBANKART_TXN_TOPOLOGY_CONFIRMED=replicaSet and a matching replicaSet URI option.');
     }
   }
 
-  return { databaseName: configuredName, uri: env.MONGODB_URI };
+  const localTopology = isAudit ? null : validateLocalReplicaSetUri(env.MONGODB_URI);
+  if (!isAudit && (!env.URBANKART_TXN_REPLICA_SET_NAME
+      || env.URBANKART_TXN_REPLICA_SET_NAME !== localTopology.replicaSet)) {
+    throw new SafetyError('URBANKART_TXN_REPLICA_SET_NAME must match the replicaSet value in the local MongoDB URI.');
+  }
+  return { databaseName: configuredName, uri: env.MONGODB_URI, expectedReplicaSetName: localTopology?.replicaSet || null };
 }
 
 async function connectAfterPreflight({ mode, argv = process.argv.slice(2), env = process.env, connect }) {
@@ -111,5 +149,6 @@ module.exports = {
   validatePreflight,
   connectAfterPreflight,
   classifyTopology,
-  assessTransactionVersion
+  assessTransactionVersion,
+  validateLocalReplicaSetUri
 };

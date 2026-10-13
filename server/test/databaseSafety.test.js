@@ -12,7 +12,7 @@ const { readDay1SeedNames, connectReadOnly } = require('../scripts/auditDatabase
 const { requireTransactionTopology } = require('../scripts/checkoutIntegrationCommon');
 
 const dbName = 'urbankart_test_isolated';
-const uri = 'mongodb://private-user:private-pass@localhost:27017/urbankart_test_isolated?retryWrites=true';
+const uri = 'mongodb://127.0.0.1:27018/urbankart_test_isolated?replicaSet=ukStageH';
 
 function validEnv(overrides = {}) {
   return {
@@ -21,6 +21,7 @@ function validEnv(overrides = {}) {
     URBANKART_DB_ENV: 'isolated-development',
     URBANKART_TEST_DB_NAME: dbName,
     URBANKART_TXN_TOPOLOGY_CONFIRMED: 'replicaSet',
+    URBANKART_TXN_REPLICA_SET_NAME: 'ukStageH',
     ...overrides
   };
 }
@@ -108,12 +109,41 @@ test('integration preflight requires a matching test database and topology attes
     validEnv({ URBANKART_TEST_DB_NAME: '' }),
     validEnv({ URBANKART_TEST_DB_NAME: 'other_db' }),
     validEnv({ URBANKART_TXN_TOPOLOGY_CONFIRMED: '' }),
-    validEnv({ URBANKART_TXN_TOPOLOGY_CONFIRMED: 'standalone' })
+    validEnv({ URBANKART_TXN_TOPOLOGY_CONFIRMED: 'standalone' }),
+    validEnv({ MONGODB_URI: 'mongodb+srv://cluster.example/urbankart_test_isolated?replicaSet=ukStageH' }),
+    validEnv({ MONGODB_URI: 'mongodb://atlas.mongodb.net/urbankart_test_isolated?replicaSet=ukStageH' }),
+    validEnv({ MONGODB_URI: 'mongodb://192.168.1.5:27017/urbankart_test_isolated?replicaSet=ukStageH' }),
+    validEnv({ MONGODB_URI: 'mongodb://127.0.0.1:27018/urbankart_test_isolated' }),
+    validEnv({ MONGODB_URI: 'mongodb://127.0.0.1:27018/urbankart_test_isolated?replicaSet=other' }),
+    validEnv({ MONGODB_URI: 'mongodb://127.0.0.1:27018/urbankart_test_isolated?replicaSet=ukStageH', URBANKART_TXN_REPLICA_SET_NAME: '' }),
+    validEnv({ MONGODB_URI: 'mongodb://127.0.0.1:27018/urbankart_test_isolated?replicaSet=ukStageH', URBANKART_TXN_REPLICA_SET_NAME: 'other' })
   ];
   for (const env of cases) {
     let connects = 0;
     await assert.rejects(connectAfterPreflight({
       mode: 'integration-test', argv: testArgs, env,
+      connect: async () => { connects += 1; }
+    }), SafetyError);
+    assert.equal(connects, 0);
+  }
+});
+
+test('integration preflight accepts only explicit loopback replica-set targets before connecting', async () => {
+  for (const host of ['localhost:27018', '127.0.0.1:27018', '[::1]:27018']) {
+    const env = validEnv({ MONGODB_URI: `mongodb://${host}/${dbName}?replicaSet=ukStageH`, URBANKART_TXN_REPLICA_SET_NAME: 'ukStageH' });
+    const result = validatePreflight({ mode: 'integration-test', argv: testArgs, env });
+    assert.equal(result.expectedReplicaSetName, 'ukStageH');
+  }
+  const rejectedUris = [
+    'mongodb://127.0.0.1:27018,attacker.example:27018/urbankart_test_isolated?replicaSet=ukStageH',
+    'mongodb://[::ffff:127.0.0.1]:27018/urbankart_test_isolated?replicaSet=ukStageH',
+    'mongodb://127.0.0.1:27018/urbankart_test_isolated?replicaSet=ukStageH&replicaSet=other'
+  ];
+  for (const testUri of rejectedUris) {
+    let connects = 0;
+    await assert.rejects(connectAfterPreflight({
+      mode: 'integration-test', argv: testArgs,
+      env: validEnv({ MONGODB_URI: testUri }),
       connect: async () => { connects += 1; }
     }), SafetyError);
     assert.equal(connects, 0);
