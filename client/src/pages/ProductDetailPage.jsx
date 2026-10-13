@@ -33,11 +33,17 @@ export default function ProductDetailPage() {
   useEffect(() => { document.title = state.product?.name ? `${state.product.name} | UrbanKart` : 'Product | UrbanKart'; }, [state.product]);
 
   const product = state.product;
-  const canAdd = auth.isAuthenticated && Number.isInteger(product?.stock) && product.stock > 0 && !cart.isMutating;
+  const canAdd = auth.isAuthenticated && Number.isInteger(product?.stock) && product.stock > 0
+    && !cart.isMutating && !cart.mutationError?.uncertain;
   const addToCart = async () => {
     setFeedback('');
     const outcome = await cart.addItem(product._id, quantity);
-    setFeedback(outcome?.ok ? `${product.name} was added to your cart.` : outcome?.error?.message || 'We could not confirm the cart update. Please review your cart before trying again.');
+    setFeedback(outcome?.ok ? `${product.name} was added to your cart.` : outcome?.error?.message || 'We could not confirm the cart update. Refresh your cart before trying again.');
+  };
+
+  const confirmCart = async () => {
+    const result = await cart.refresh();
+    if (result) setFeedback('Your cart has been refreshed. Review its contents before making another change.');
   };
 
   if (state.status === 'loading') return <PageContainer className="route-state" aria-busy="true"><p className="eyebrow">Product detail</p><h1>Loading item…</h1></PageContainer>;
@@ -58,7 +64,7 @@ export default function ProductDetailPage() {
           {Array.isArray(product.attributes) && product.attributes.length > 0 && <dl className="attribute-list">{product.attributes.filter((item) => item && typeof item.key === 'string' && typeof item.value === 'string').map((item, index) => <div key={`${item.key}-${index}`}><dt>{item.key}</dt><dd>{item.value}</dd></div>)}</dl>}
           {auth.isAuthenticated ? <div className="add-controls">
             {Number.isInteger(product.stock) && product.stock > 0 && <label>Quantity <input aria-label="Quantity" type="number" min="1" max={product.stock} step="1" value={quantity} onChange={(event) => setQuantity(Math.min(product.stock, Math.max(1, Math.floor(Number(event.target.value) || 1))))} /></label>}
-            <button className="button button--dark" type="button" disabled={!canAdd} onClick={addToCart}>{cart.isMutating ? 'Adding…' : product.stock === 0 ? 'Unavailable' : 'Add to cart'}</button>
+            <button className="button button--dark" type="button" disabled={cart.isMutating || (!canAdd && !cart.mutationError?.uncertain)} onClick={cart.mutationError?.uncertain ? confirmCart : addToCart}>{cart.isMutating ? 'Adding…' : cart.mutationError?.uncertain ? 'Refresh cart' : product.stock === 0 ? 'Unavailable' : 'Add to cart'}</button>
           </div> : <Link className="button button--dark" to="/login" state={{ from: `${location.pathname}${location.search}` }}>Sign in to add to cart</Link>}
           {feedback && <p className={feedback.includes('was added') ? 'form-success' : 'form-error'} role="status">{feedback}</p>}
           {cart.mutationError && !feedback && <p className="form-error" role="alert">{cart.mutationError.message}</p>}

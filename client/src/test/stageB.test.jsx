@@ -7,12 +7,12 @@ import { CartProvider, useCart } from '../cart/CartContext.jsx';
 import { API_BASE_URL } from '../config/environment.js';
 import { httpClient, normalizeApiError } from '../api/httpClient.js';
 import { getAccessToken, clearAccessToken, setAccessToken } from '../api/tokenStore.js';
-import { getCart, normalizeCart } from '../api/cartApi.js';
+import { addCartItem, getCart, normalizeCart } from '../api/cartApi.js';
 import { login, register } from '../api/authApi.js';
 import { MemoryRouter } from 'react-router';
 
 vi.mock('../api/authApi.js', () => ({ login: vi.fn(), register: vi.fn() }));
-vi.mock('../api/cartApi.js', async (importOriginal) => ({ ...(await importOriginal()), getCart: vi.fn() }));
+vi.mock('../api/cartApi.js', async (importOriginal) => ({ ...(await importOriginal()), addCartItem: vi.fn(), getCart: vi.fn() }));
 
 const success = (id = 'user-1') => ({
   status: 'success', token: `opaque-${id}`, user: { id, name: 'A User', email: `${id}@example.test`, role: 'customer' }
@@ -66,6 +66,11 @@ describe('HTTP layer', () => {
     expect(normalizeCart({ items: [{ productId: { _id: 'p-1', name: 'Item', price: 12, stock: 4, category: 'Home' }, quantity: 2 }] })).toEqual({
       items: [{ productId: 'p-1', quantity: 2, product: { _id: 'p-1', name: 'Item', price: 12, stock: 4, category: 'Home' } }]
     });
+  });
+
+  it('rejects malformed cart responses instead of presenting them as an empty cart', () => {
+    expect(() => normalizeCart({})).toThrow('The cart service returned an unexpected response.');
+    expect(() => normalizeCart({ items: [{ productId: 'p-1', quantity: 0 }] })).toThrow('The cart service returned an unexpected response.');
   });
 
   it('does not treat a public login 401 as an invalidation of another session', async () => {
@@ -219,6 +224,36 @@ describe('cart context', () => {
     await act(async () => { await result.current.cart.refresh(); });
     expect(result.current.cart.status).toBe('error');
     expect(result.current.cart.error.message).toBe('Network unavailable');
+  });
+
+  it('marks an unconfirmed cart mutation and requires a read refresh before another change', async () => {
+    login.mockResolvedValue(success());
+    const persistedCart = { items: [{ productId: 'p-1', quantity: 1, product: { price: 12 } }] };
+    getCart.mockResolvedValueOnce({ items: [] })
+      .mockRejectedValueOnce(Object.assign(new Error('Network unavailable'), { kind: 'network' }))
+      .mockResolvedValueOnce(persistedCart);
+    addCartItem.mockResolvedValue({});
+    const { result } = renderHook(() => ({ auth: useAuth(), cart: useCart() }), { wrapper: appWrapper });
+    await act(async () => { await result.current.auth.login({ email: 'user@example.test', password: 'password' }); });
+    await waitFor(() => expect(getCart).toHaveBeenCalledTimes(1));
+
+    let outcome;
+    await act(async () => { outcome = await result.current.cart.addItem('p-1', 1); });
+    expect(outcome).toMatchObject({ ok: false, uncertain: true });
+    expect(outcome.error.message).toMatch(/could not be confirmed/i);
+    expect(addCartItem).toHaveBeenCalledTimes(1);
+
+    let blockedOutcome;
+    await act(async () => { blockedOutcome = await result.current.cart.addItem('p-1', 1); });
+    expect(blockedOutcome).toMatchObject({ ok: false, uncertain: true });
+    expect(addCartItem).toHaveBeenCalledTimes(1);
+
+    let refreshed;
+    await act(async () => { refreshed = await result.current.cart.refresh(); });
+    expect(refreshed).toEqual(persistedCart);
+    expect(addCartItem).toHaveBeenCalledTimes(1);
+    expect(result.current.cart.mutationError).toBeNull();
+    expect(result.current.cart.itemCount).toBe(1);
   });
 
   it('clears cart state at logout and ignores an older in-flight response', async () => {

@@ -127,6 +127,44 @@ describe('Stage C catalogue and detail', () => {
     expect(await screen.findByText('Requested quantity is not currently available.')).toBeTruthy();
   });
 
+  it('requires a read-only cart refresh after an uncertain add instead of replaying it', async () => {
+    signedIn();
+    addCartItem.mockRejectedValueOnce(Object.assign(new Error('Network unavailable'), { kind: 'network' }));
+    renderApp(['/products/p-1']);
+    fireEvent.click(await screen.findByRole('link', { name: 'Sign in to add to cart' }));
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'shopper@example.test' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-horse' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to cart' }));
+    expect(await screen.findByText(/cart change could not be confirmed/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh cart' }));
+    await waitFor(() => expect(getCart).toHaveBeenCalledTimes(2));
+    expect(addCartItem).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/cart has been refreshed/i)).toBeTruthy();
+  });
+
+  it('blocks cart edits after an uncertain update until a refresh succeeds', async () => {
+    signedIn();
+    getCart.mockResolvedValue({ items: [{ productId: 'p-1', quantity: 1, product }] });
+    setCartItemQuantity.mockRejectedValueOnce(Object.assign(new Error('Network unavailable'), { kind: 'network' }));
+    renderApp(['/cart']);
+    fireEvent.click(within(screen.getByRole('main')).getByRole('link', { name: 'Sign in' }));
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'shopper@example.test' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'correct-horse' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await screen.findByText('Estimated subtotal');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Increase Canvas carryall quantity' }));
+    expect(await screen.findByText(/cart change could not be confirmed/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Increase Canvas carryall quantity' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Remove' }).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh cart' }));
+    await waitFor(() => expect(getCart).toHaveBeenCalledTimes(2));
+    expect(setCartItemQuantity).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Increase Canvas carryall quantity' }).disabled).toBe(false);
+  });
+
   it('validates login fields and authenticates through the shared provider', async () => {
     const { container } = renderApp(['/login']);
     const form = container.querySelector('form');

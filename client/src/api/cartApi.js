@@ -1,16 +1,25 @@
 import { httpClient } from './httpClient.js';
 
 export function normalizeCart(payload) {
-  const sourceItems = Array.isArray(payload?.items) ? payload.items : [];
-  const items = sourceItems.map((item) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !Array.isArray(payload.items)) {
+    throw new Error('The cart service returned an unexpected response.');
+  }
+  const items = payload.items.map((item) => {
+    if (!item || typeof item !== 'object' || !Number.isSafeInteger(item.quantity) || item.quantity <= 0) {
+      throw new Error('The cart service returned an unexpected response.');
+    }
     const productValue = item?.productId;
     const product = productValue && typeof productValue === 'object' ? productValue : null;
+    const productId = product?._id ?? productValue ?? null;
+    if (productId !== null && typeof productId !== 'string') {
+      throw new Error('The cart service returned an unexpected response.');
+    }
     return {
-      productId: product?._id ?? productValue ?? null,
-      quantity: Number.isSafeInteger(item?.quantity) && item.quantity > 0 ? item.quantity : 0,
+      productId,
+      quantity: item.quantity,
       product
     };
-  }).filter((item) => item.quantity > 0);
+  });
   return { items };
 }
 

@@ -5,11 +5,23 @@ import { useAuth } from '../auth/AuthContext.jsx';
 const CartContext = createContext(null);
 const emptyCart = { items: [] };
 
+function isUncertainMutation(error) {
+  return ['network', 'timeout', 'server'].includes(error?.kind);
+}
+
+function uncertainMutationError() {
+  return Object.assign(
+    new Error('The cart change could not be confirmed. Refresh your cart before trying again.'),
+    { uncertain: true }
+  );
+}
+
 export function CartProvider({ children }) {
   const auth = useAuth();
   const [state, setState] = useState({ status: 'idle', ownerId: null, sessionRevision: null, data: emptyCart, error: null });
   const requestId = useRef(0);
   const mutationLock = useRef(false);
+  const uncertainMutation = useRef(false);
   const [mutationState, setMutationState] = useState({ busy: false, error: null });
   const currentUserId = auth.isAuthenticated ? auth.user.id : null;
 
@@ -21,6 +33,8 @@ export function CartProvider({ children }) {
       const data = await getCart({ signal });
       if (ownRequest === requestId.current && !signal?.aborted) {
         setState({ status: data.items.length ? 'ready' : 'empty', ownerId: currentUserId, sessionRevision: auth.sessionRevision, data, error: null });
+        uncertainMutation.current = false;
+        setMutationState({ busy: false, error: null });
       }
       return data;
     } catch (error) {
@@ -33,18 +47,27 @@ export function CartProvider({ children }) {
 
   const mutate = useCallback(async (request) => {
     if (!auth.isAuthenticated || !currentUserId) return { ok: false, error: new Error('Sign in before updating your cart.') };
+    if (uncertainMutation.current) return { ok: false, error: mutationState.error, uncertain: true };
     if (mutationLock.current) return { ok: false, error: new Error('A cart update is already in progress.') };
     mutationLock.current = true;
     setMutationState({ busy: true, error: null });
     try {
       await request();
       const refreshed = await refresh();
-      if (!refreshed) return { ok: false, error: new Error('The cart update could not be confirmed. Review your cart before trying again.') };
+      if (!refreshed) {
+        const error = uncertainMutationError();
+        uncertainMutation.current = true;
+        setMutationState({ busy: false, error });
+        return { ok: false, error, uncertain: true };
+      }
       setMutationState({ busy: false, error: null });
       return { ok: true, error: null };
     } catch (error) {
-      setMutationState({ busy: false, error });
-      return { ok: false, error };
+      const uncertain = isUncertainMutation(error);
+      const reportedError = uncertain ? uncertainMutationError() : error;
+      uncertainMutation.current = uncertain;
+      setMutationState({ busy: false, error: reportedError });
+      return { ok: false, error: reportedError, uncertain };
     } finally {
       mutationLock.current = false;
       setMutationState((current) => ({ ...current, busy: false }));
@@ -61,7 +84,10 @@ export function CartProvider({ children }) {
     const ownRequest = ++requestId.current;
     if (!auth.isAuthenticated || !currentUserId || auth.isInitializing || auth.isSubmitting) {
       setState({ status: 'idle', ownerId: null, sessionRevision: null, data: emptyCart, error: null });
-      if (!auth.isAuthenticated || !currentUserId) setMutationState({ busy: false, error: null });
+      if (!auth.isAuthenticated || !currentUserId) {
+        uncertainMutation.current = false;
+        setMutationState({ busy: false, error: null });
+      }
       return () => { requestId.current += 1; };
     }
     const controller = new AbortController();

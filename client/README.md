@@ -1,6 +1,6 @@
 # UrbanKart Client
 
-React storefront for the UrbanKart e-commerce project. Stage A's editorial paper, ink, rust, and olive design system remains the visual foundation. Stage B supplies shared API, authentication, and cart state. Stage C connects catalog, product detail, login/registration, and cart editing screens to the existing backend.
+React storefront for the UrbanKart e-commerce project. Stage A's editorial paper, ink, rust, and olive design system remains the visual foundation. Stage B supplies shared API, authentication, and cart state. Stage C connects catalogue, product detail, login/registration, and cart editing screens to the existing backend. Stage D hardens cart response handling and the UI for cart changes whose outcome cannot be confirmed.
 
 ## Local setup
 
@@ -40,6 +40,16 @@ The URL includes `/api`; the API modules append route paths. The current Express
 - `src/auth/AuthContext.jsx` exposes login, registration, local logout, auth status, errors, and session invalidation through `useAuth()`.
 - `src/cart/CartContext.jsx` loads the authenticated user's cart and exposes state, derived item count and display subtotal, refresh, and guarded cart mutations through `useCart()`. It hides user-specific cart state after logout/session invalidation and ignores stale responses.
 - The server remains authoritative for authentication and stock validation. The UI does not make role-based access decisions. A cart mutation error is shown to the user; the client does not claim an item was added unless its mutation and refresh succeeded.
+- A network failure, server error, or failed read-back after a cart mutation can leave its outcome uncertain. The client asks the shopper to refresh and inspect the cart before trying another write; it does not automatically replay the mutation and blocks further cart writes until a read refresh succeeds. A malformed cart response is surfaced as an error instead of being displayed as an empty cart.
+
+## Stage D verification and boundaries
+
+- The API paths and payloads above were checked against the current Express route and Mongoose model source. The backend listens on `PORT` (default `5000`) and its startup script loads the repository-root `.env`, then connects to the configured MongoDB URI before listening. Cart records are stored in MongoDB as `Cart` documents, so they persist across requests and server restarts when the configured database is available.
+- The Vite development proxy forwards `/api` to `http://localhost:5000`. A temporary in-memory HTTP fixture confirmed that the proxy forwards a JSON request and bearer header and preserves a fixture `422` JSON response. This is proxy verification only, not an Express/backend integration test. The proxy is development-only; the Express application has no CORS middleware or verified production same-origin routing configuration.
+- The local database configuration points to MongoDB Atlas. Stage D therefore did not start the backend or send requests through it: Atlas use is outside this milestone's safety boundary. Client behavior is covered by deterministic API-boundary mocks and browser fixtures only; no live backend response, registration/login write, cart write, or database persistence was verified in Stage D.
+- Client tests do not call checkout. Checkout was not implemented, invoked, or tested in Stage D. Do not infer transactional, idempotency, inventory-reservation, payment, delivery, or production-load guarantees from the client checks.
+- Authentication remains memory-only: a refresh signs the shopper out. There is no verified session restoration or refresh-token endpoint. The product API has no image, currency, or category-list field/endpoint, and the server currently returns raw product arrays with pagination headers.
+- Before deployment, configure and verify same-origin routing or a deliberate server-side CORS policy, safe environment-specific database configuration, HTTPS, and the backend security/operational controls appropriate to the deployment. This client review is not a full backend security audit.
 
 ## Tests and verification
 
@@ -49,4 +59,4 @@ npm run build
 npm ls --depth=0
 ```
 
-Vitest and Testing Library tests mock API modules at the frontend boundary. They cover the existing Stage B HTTP/auth/cart behavior plus Stage C catalogue loading, empty and error states, URL search/category filters, pagination, product-detail states and add-to-cart flow, auth forms, guest cart guidance, and cart editing. Tests do not connect to a backend or MongoDB and do not call checkout. A passing client test or build is not a live integration test.
+Vitest and Testing Library tests mock API modules at the frontend boundary. They cover the Stage B HTTP/auth/cart behavior, Stage C catalogue and route flows, and Stage D malformed-cart and unconfirmed-cart-mutation handling. Tests do not connect to a backend or MongoDB and do not call checkout. A passing client test or build is not a live integration test.
