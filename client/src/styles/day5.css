@@ -39,6 +39,27 @@
 .dashboard-chart--pie { height: 22rem; }
 .dashboard-chart__empty { display: grid; min-height: 10rem; margin: 1rem 0 0; place-items: center; color: var(--color-muted); }
 .dashboard-footnote { max-width: 72rem; margin: 1.25rem 0 0; color: var(--color-muted); font-size: var(--text-xs); }
+.admin-workspace { border: 1px solid var(--color-line); background: var(--color-white); }
+.admin-tabs { display: flex; gap: .35rem; overflow-x: auto; padding: .8rem; border-bottom: 1px solid var(--color-line); }
+.admin-tabs button { flex: 0 0 auto; padding: .7rem .9rem; border: 0; background: transparent; color: var(--color-ink-soft); cursor: pointer; }
+.admin-tabs button.is-active { background: var(--color-ink); color: var(--color-white); }
+.admin-workspace__body { min-height: 14rem; padding: clamp(1rem, 2vw, 1.75rem); }
+.admin-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .75rem; margin-bottom: 1.5rem; }
+.admin-metric { display: grid; gap: .45rem; padding: 1rem; border: 1px solid var(--color-line); }
+.admin-metric span { color: var(--color-muted); font-size: var(--text-xs); }
+.admin-metric strong { font-size: var(--text-xl); }
+.admin-compact-list { max-width: 36rem; padding: 0; list-style: none; }
+.admin-compact-list li { display: flex; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-bottom: 1px solid var(--color-line); }
+.admin-table-wrap { max-width: 100%; overflow-x: auto; margin-block: 1rem; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); text-align: left; }
+.admin-table th, .admin-table td { padding: .7rem; border-bottom: 1px solid var(--color-line); vertical-align: top; }
+.admin-table th { white-space: nowrap; }
+.admin-search, .admin-product-form label { display: grid; gap: .35rem; max-width: 30rem; margin-block: .8rem; }
+.admin-search input, .admin-product-form input, .admin-product-form textarea { width: 100%; padding: .65rem; border: 1px solid var(--color-line); background: var(--color-white); }
+.admin-product-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .25rem 1rem; padding: 1rem; margin-bottom: 1.25rem; border: 1px solid var(--color-line); }
+.admin-product-form h3, .admin-product-form button { grid-column: 1 / -1; }
+.admin-detail { padding: 1rem; margin-block: 1rem; background: var(--color-paper); }
+.admin-pager { display: flex; align-items: center; justify-content: center; gap: 1rem; padding-block: 1rem; }
 
 @media (max-width: 760px) {
   .dashboard-grid { grid-template-columns: minmax(0, 1fr); }

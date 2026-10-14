@@ -7,6 +7,7 @@ import {
 import PageContainer from '../components/layout/PageContainer.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { getAdminDashboard } from '../api/adminApi.js';
+import AdminWorkspace from '../components/admin/AdminWorkspace.jsx';
 
 const STATUS_COLORS = ['#b64c35', '#586044', '#d4a13c', '#698783', '#8c8271', '#665479'];
 const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
@@ -75,6 +76,7 @@ export default function AdminDashboard() {
   const auth = useAuth();
   const isAdmin = auth.isAuthenticated && auth.user?.role === 'admin';
   const [attempt, setAttempt] = useState(0);
+  const [section, setSection] = useState('Overview');
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
 
   useEffect(() => {
@@ -105,17 +107,18 @@ export default function AdminDashboard() {
     <p>Your account cannot open dashboard analytics.</p><Link className="button" to="/">Return to the collection</Link>
   </PageContainer>;
 
+  const analytics = <>
+    {state.status === 'loading' && <div className="dashboard-message" role="status" aria-busy="true"><h2>Loading analytics…</h2><p>Summarizing order records in MongoDB.</p></div>}
+    {state.status === 'error' && <div className="dashboard-message" role="alert"><h2>Analytics could not be loaded.</h2><p>{state.error?.message || 'The dashboard service is temporarily unavailable.'}</p><button className="button button--dark" type="button" onClick={() => setAttempt((current) => current + 1)}>Retry analytics</button></div>}
+    {state.status === 'ready' && !hasOrders && <div className="dashboard-message" role="status"><h2>No orders to summarize yet.</h2><p>Dashboard charts will appear when the orders collection has records.</p></div>}
+    {state.status === 'ready' && hasOrders && <><DashboardCharts data={state.data} /><p className="dashboard-footnote">Revenue uses historical item prices and quantities for completed, shipped and delivered orders. Category names come from current product records; deleted or missing products are Unattributed.</p></>}
+  </>;
+
   return <PageContainer className="admin-page">
     <div className="catalog-heading admin-page__heading">
-      <div><p className="eyebrow"><span className="eyebrow__rule" /> Store overview</p><h1>Admin analytics</h1></div>
-      {state.status === 'ready' && <button className="button" type="button" onClick={() => setAttempt((current) => current + 1)}>Refresh analytics</button>}
+      <div><p className="eyebrow"><span className="eyebrow__rule" /> Store management</p><h1>Admin Dashboard</h1></div>
+      {section === 'Analytics' && state.status === 'ready' && <button className="button" type="button" onClick={() => setAttempt((current) => current + 1)}>Refresh analytics</button>}
     </div>
-    {state.status === 'loading' && <div className="dashboard-message" role="status" aria-busy="true"><h2>Loading analytics…</h2><p>Summarizing order records in MongoDB.</p></div>}
-    {state.status === 'error' && <div className="dashboard-message" role="alert"><h2>Analytics could not be loaded.</h2><p>{state.error?.message || 'The dashboard service is temporarily unavailable.'}</p><button className="button button--dark" type="button" onClick={() => setAttempt((current) => current + 1)}>Retry dashboard</button></div>}
-    {state.status === 'ready' && !hasOrders && <div className="dashboard-message" role="status"><h2>No orders to summarize yet.</h2><p>Dashboard charts will appear when the orders collection has records.</p><button className="button" type="button" onClick={() => setAttempt((current) => current + 1)}>Refresh analytics</button></div>}
-    {state.status === 'ready' && hasOrders && <>
-      <DashboardCharts data={state.data} />
-      <p className="dashboard-footnote">Revenue is based on historical item prices and quantities for completed, shipped and delivered orders. Category names come from the current product record; deleted or missing products are shown as Unattributed.</p>
-    </>}
+    <AdminWorkspace section={section} onSectionChange={setSection} analytics={analytics}/>
   </PageContainer>;
 }
