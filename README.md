@@ -129,7 +129,7 @@ The Stage F statement below is historical and is superseded by the Stage G and S
 | **carts** | Volatile user state | `userId`, `items[{ productId, quantity }]`<br>**Embedded Cart Items**: Quick retrieval. | ✅ Implemented |
 | **orders** | Historical purchases | `customerId`, `items[productId, nameAtPurchase, priceAtPurchase, qty]`, `totalAmount`, `status`, `orderDate`<br>**Snapshot Pattern**: Financial immutability embedded. | ✅ Implemented |
 | **checkoutoperations** | Idempotent checkout results | `userId`, `key`, `fingerprint`, `orderId`<br>Unique `{ userId, key }` index prevents duplicate operations per user. | ✅ Implemented |
-| **reviews** | User feedback | `productId, userId, rating, comment`<br>**Referencing**: Independent scaling. | ✅ Implemented |
+| **reviews** | User feedback | `productId, userId, rating, text`<br>**Referencing**: Independent scaling. | ✅ Implemented |
 | **recommendations** | Algorithmic output | `productId`, `relatedProducts[productId, score]`, `computedAt`<br>**Materialized View**: Top 5 embedded recommendations. | ✅ Implemented |
 
 ## 🧠 8. Why NoSQL / MongoDB?
@@ -303,7 +303,7 @@ Beyond the current roadmap, potential future architectural extensions include:
     ```
 2.  **Install backend dependencies:**
     ```bash
-    npm install
+    npm.cmd install
     ```
 3.  **Environment Setup:**
     Create the root `.env` from `.env.example`, then independently choose the intended database target. The server reads `MONGODB_URI` from this file. Never aim a seed/import operation at Atlas; initialization and import require an explicit, loopback-only local replica-set gate.
@@ -314,15 +314,15 @@ Beyond the current roadmap, potential future architectural extensions include:
     $env:URBANKART_DB_ENV='isolated-development'
     $env:URBANKART_TXN_TOPOLOGY_CONFIRMED='replicaSet'
     $env:URBANKART_TXN_REPLICA_SET_NAME='ukLocal'
-    npm run db:init:local -- --confirm-local-db urbankart_local
-    npm run test:db:validation -- --confirm-local-db urbankart_local
+    npm.cmd run db:init:local -- --confirm-local-db urbankart_local
+    npm.cmd run test:db:validation -- --confirm-local-db urbankart_local
     ```
     These are process-scoped examples, not a MongoDB server startup command. The Day 1 sample seed now also requires `--confirm-local-db <name>`, verifies all replica-set members are loopback, and upserts only deterministic sample IDs without clearing products.
 5.  **Start the API and client:**
     ```bash
     node server.js
     ```
-    The API defaults to port 5000. In another terminal run `cd ../client; npm install; npm run dev`. Vite proxies `/api` to loopback Express. Verify `http://127.0.0.1:5000/api/health` before using the client.
+    The API defaults to port 5000. In another PowerShell terminal run `cd ..\client; npm.cmd install; npm.cmd run dev -- --host 127.0.0.1`. Vite proxies `/api` to loopback Express. Open `http://127.0.0.1:5173` and verify `http://127.0.0.1:5000/api/health` before the walkthrough. `npm.cmd` works around PowerShell execution policies that may block `npm.ps1`.
 
 ## 🧪 24. Stage G — Isolated local integration verification
 

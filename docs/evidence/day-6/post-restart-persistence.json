@@ -1,11 +1,17 @@
 {
   "date": "2026-10-14",
+  "history": "The first attempted restart did not recover the initial populated state: the replica-set configuration was absent and the target population was rebuilt after reconfiguration. This record covers a later controlled shutdown and restart of that rebuilt populated directory.",
   "database": "urbankart_day6_verification",
   "replicaSet": "ukDay6Verification",
+  "host": "127.0.0.1:27221",
+  "dataDirectory": "%TEMP%\\urbankart_day6_verification_20261014",
+  "controlledShutdownBeforeRestart": true,
   "replicaSetPrimaryAfterRestart": true,
   "products": 19159,
   "recommendationDocuments": 19159,
   "relatedProducts": 95509,
   "validators": 7,
-  "result": "passed after restart of task-owned mongod using the task-owned data directory"
+  "uniqueEmailIndex": { "name": "email_1", "key": { "email": 1 }, "unique": true },
+  "duplicateRegistrationHttpStatus": 409,
+  "result": "same rebuilt populated task-owned data directory reopened after controlled shutdown; counts, validators, and unique email index verified"
 }

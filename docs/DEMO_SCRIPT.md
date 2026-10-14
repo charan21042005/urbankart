@@ -26,4 +26,4 @@ Log in as a local admin and open the dashboard. Describe the MongoDB aggregation
 
 ## 3:35–4:00 — evidence and limits
 
-Show `docs/day-6-indexing-evidence.md` and the raw explain JSON. The category browse plan used `IXSCAN` after the compound index but still sorted by `_id`; the one-run measured time was 21 ms after versus 13 ms before, so this proves index use, not improvement. Close with dataset AMBER rights status, Docker/browser screenshot limitations, and unimplemented stretch items.
+Show `docs/day-6-indexing-evidence.md` and the raw explain JSON. The category browse plan used `IXSCAN` after the compound index but still sorted by `_id`; the one-run measured time was 21 ms after versus 13 ms before, so this proves index use, not improvement. Mention the verified backend review CRUD (public reads, signed-in create, author-only edit/delete); the SRS does not require a review form in the storefront. Close with dataset AMBER rights status, Docker/browser screenshot limitations, and unimplemented stretch items.

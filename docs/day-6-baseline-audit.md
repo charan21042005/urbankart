@@ -64,11 +64,11 @@ Docker Engine downtime and the lack of container definitions mean one-command Co
 | Gate | Status | Evidence / remaining limitation |
 |---|---|---|
 | 0 — baseline | PASS | Snapshot above; clean `main` at Day 5 commit, origin matched, no release tags. |
-| 1 — clean local startup | PASS with Docker/UI limitations | Fresh isolated replica set, validators/indexes, 19,159-product import, full recommendations, API/Vite smoke, and same-directory restart persistence; Docker Compose and visual screenshot checks unavailable. |
+| 1 — clean local startup | PASS with Docker/UI limitations | Fresh isolated replica set, validators/indexes, 19,159-product import, full recommendations, API/Vite smoke, and controlled same-directory restart persistence after the initial restart failed and the local population was rebuilt; Docker Compose and visual screenshot checks unavailable. |
 | 2 — regression | PASS | Server 85/85, client 60/60, client build succeeded (749.15 kB JS chunk advisory). |
 | 3 — checkout | PASS | One 201/19 conflicts; rollback, idempotency, and reconciliation cases passed. |
-| 4 — indexing | PARTIAL | Genuine 19,159-product explains and index selection captured; category execution was 21 ms after vs 13 ms before, so no measured latency improvement is claimed. |
-| 5 — requirements | PASS WITH LIMITATIONS | Checklist and module traceability point to implemented evidence and explicitly unimplemented stretch goals. |
+| 4 — indexing | PARTIAL | Genuine 19,159-product explains and unique email-index metadata captured; execution samples were under 150 ms, but are insufficient to demonstrate the SRS latency target as an SLO. Category execution was 21 ms after vs 13 ms before, so no measured latency improvement is claimed. |
+| 5 — requirements | PARTIAL at the original Day 6 audit | At that audit time review routes were absent. The later M3 follow-up implements and verifies review CRUD; see the current M3 PASS in the final checklist and traceability. |
 | 6 — README/setup | PASS WITH LIMITATIONS | Native local setup and dataset caveats documented; Docker one-command start remains unavailable. |
 | 7 — demo/viva | PASS | Timed script and viva answers include actual method and evidence; live GUI/oral rehearsal remain manual. |
 | 8 — security/performance | PASS WITH OPEN ITEMS | Local safety, dataset scope, bundle advisory, and third-party rights recorded; overall dataset redistribution AMBER. |

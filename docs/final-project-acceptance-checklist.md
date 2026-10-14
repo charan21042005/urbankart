@@ -1,6 +1,6 @@
 # UrbanKart final project acceptance checklist
 
-Date: 2026-10-14. This checklist reflects this Day 6 run, not prior milestone reports.
+Date: 2026-10-14. This checklist includes the final academic-submission regression rerun and preserves earlier Day 6 evidence and limitations.
 
 ## Six SRS modules
 
@@ -11,7 +11,7 @@ Date: 2026-10-14. This checklist reflects this Day 6 run, not prior milestone re
 | M3 — Order & Review Service | **PASS**: order service remains verified; review CRUD is implemented with public reads, signed-in creation, author-only update/delete, validation, and transaction-backed product rating aggregates. |
 | M4 — Recommendation Engine | **PASS** for explainable content-based scoring, full-catalog recompute, bounded cache, fallback tests, and persisted local cache. Vector search is not implemented. |
 | M5 — Analytics & Aggregation Layer | **PASS** for the admin `$facet` dashboard and live local role checks. |
-| M6 — Web Application (React + Express API) | **PASS WITH VISUAL LIMITATION**: API and Vite proxy smoke/build/tests pass; no Day 6 GUI screenshot/visual review was available. |
+| M6 — Web Application (React + Express API) | **PARTIAL**: API/Vite startup and automated checks pass; browser visual verification could not complete because installed Chrome exited with GPU process error `-1073741790`. |
 
 ## Core implementation and evidence
 
@@ -23,20 +23,50 @@ Date: 2026-10-14. This checklist reflects this Day 6 run, not prior milestone re
 - [x] Review CRUD: focused tests and isolated MongoDB replica-set integration; public product/single-review reads, authenticated create, author-only patch/delete, validation, and aggregate recomputation.
 - [x] Synthetic smoke records removed by captured IDs.
 - [x] Controlled restart persistence of the rebuilt task-owned database: same replica-set identity, 19,159 products, 19,159 caches, 95,509 related entries, seven validators. The first restart attempt failed and the population was rebuilt before this controlled check.
+- [x] Final native startup smoke on a separate loopback-only disposable database: seven validators and 14 indexes initialized; Express health and Vite root returned HTTP 200. Synthetic fixtures were isolated to that database and its `mongod` was cleanly stopped.
 - [x] Current server suite 88/88 (M3 follow-up); original Day 6 baseline was 85/85. Client tests 60/60; production client build succeeds.
 - [x] Last-unit checkout race: 1 success, 19 conflicts; rollback and idempotency/reconciliation tests pass.
 - [x] Real category/price and text-index execution plans saved under `docs/evidence/day-6/`.
 - [x] Dataset declaration and third-party rights documented; storefront attribution present; overall redistribution clearance AMBER.
 
+## Cross-cutting gates
+
+| Gate | Status | Evidence / limit |
+|---|---|---|
+| Schema validation | **PASS** | Seven local validators initialized; review text validator matches the Mongoose field/limit. |
+| MongoDB index selection | **PASS** | Category/price IXSCAN and weighted text index TEXT_MATCH are in raw explain evidence. |
+| Checkout concurrency | **PASS** | Isolated race produced one 201 and nineteen 409; stock remained nonnegative. |
+| Transaction rollback | **PASS** | Injected order failure restored stock/cart and created no order. |
+| Recommendation fallback | **PASS** | Automated route/model tests cover stale/missing-cache same-category fallback. |
+| Admin authorization | **PASS** | Current-role route tests and recorded HTTP smoke: admin 200, customer 403. |
+| Clean-start reproducibility | **PASS WITH LIMITATIONS** | Controlled database restart passed; final native API/Vite health smoke returned 200. Docker remains unavailable. |
+| SRS performance target | **PARTIAL** | Local single-run database explains are under 150 ms, but are not a sustained/end-to-end SLO. |
+| Documentation | **PASS WITH LIMITATIONS** | README, traceability, API, demo, viva, security and release docs reviewed; manual walkthrough still required. |
+| Dataset redistribution | **AMBER** | Declared CC BY-SA 4.0; uploader scope and third-party content rights remain unverified. |
+| Demo readiness | **PARTIAL** | Native services start; Chrome GUI/screenshot attempt failed with GPU process exit `-1073741790`. |
+
 ## Limits and release readiness
 
 - [ ] Docker clean startup: BLOCKED (Docker Engine unavailable; no Dockerfile/Compose configuration).
-- [ ] Browser GUI screenshots/visual smoke: not captured in this environment; HTTP checks are not visual acceptance.
+- [ ] Browser GUI screenshots/visual smoke: Chrome is installed but headless launch failed with GPU process exit `-1073741790`; HTTP checks are not visual acceptance.
 - [ ] SRS <150 ms performance goal: **PARTIAL**; three single-run database explain samples were under 150 ms, but no sustained or end-to-end SLO is established.
 - [ ] Dataset, descriptions, trademarks, and linked image rights cleared for redistribution: not established; do not package raw CSV or retailer images.
 - [ ] Change Streams, Atlas Vector Search, and GridFS stretch goals: not implemented.
-- [ ] Annotated `v1.0.0` release tag: not created; release gates are not all met.
+- [ ] Annotated `v1.0.0` release tag: intentionally not created; this academic submission does not claim production certification.
+
+## Academic submission decision
+
+**READY FOR ACADEMIC SUBMISSION.** The implementation and regression checks are complete for the documented project scope: the latest rerun passed all 88 server tests, all 60 client tests, and the client production build. This academic decision accepts documented, non-mandatory environment limits; it does not convert them into PASS results or assert production readiness.
+
+| Area | Submission status | Evidence / qualification |
+|---|---|---|
+| Implemented and tested | **PASS** | Catalog, authentication/authorization, cart, transactional checkout, recommendations/fallback, admin analytics, and review CRUD are covered by the current server/client suites and recorded isolated integration checks. |
+| Performance | **PARTIAL** | Index plans and three single-run database timings are recorded; <150 ms sustained/end-to-end performance is not established. |
+| Environment-dependent verification | **NOT VERIFIED** | Docker clean startup is unavailable; fresh Day 6 browser visual/screenshot verification did not complete. Native HTTP startup checks did pass. |
+| External rights | **AMBER** | Kaggle declares CC BY-SA 4.0; uploader authority and separate rights in retailer content remain unverified. No legal clearance is claimed. |
+
+For evaluation, use the native Windows setup and demo steps in [README Quick Start](../README.md#-23-quick-start) and [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md). Capture genuine screenshots on the evaluation machine if requested. Do not distribute the raw CSV or unclear third-party assets as part of the submission bundle.
 
 ## Verdict
 
-**Day 6 acceptance gate is NOT FULLY PASSED.** M3 review CRUD is complete and verified. Performance evidence is partial, visual/Docker gates remain open, and redistribution remains AMBER. The project is demonstrable for supervised evaluation using the verified native local setup, but it is not cleared for an unconditional public dataset bundle or one-command Docker demo. See [`day-6-release-report.md`](day-6-release-report.md) for release gate status.
+The original Day 6 **production-style release gate remains NOT FULLY PASSED**: performance evidence is partial, visual/Docker checks remain open, and redistribution remains AMBER. Separately, the project is **READY FOR ACADEMIC SUBMISSION** based on passing implementation/regression checks and explicit disclosure of those limitations. See [`day-6-release-report.md`](day-6-release-report.md) for the distinction.
