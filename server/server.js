@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('node:path');
 const app = require('./app');
+const { startRecommendationJob } = require('./jobs/recommendationScheduler');
 
 dotenv.config({ path: path.join(__dirname, '..', '.env'), quiet: true });
 
@@ -23,8 +24,16 @@ mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log('MongoDB connected via Mongoose');
     const server = HOST
-      ? app.listen(PORT, HOST, () => console.log(`Server is running on ${HOST}:${PORT}`))
-      : app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+      ? app.listen(PORT, HOST, () => {
+        console.log(`Server is running on ${HOST}:${PORT}`);
+        try { startRecommendationJob(); }
+        catch (error) { console.error(`Recommendation scheduler was not started (${error?.name || 'Error'}).`); }
+      })
+      : app.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
+        try { startRecommendationJob(); }
+        catch (error) { console.error(`Recommendation scheduler was not started (${error?.name || 'Error'}).`); }
+      });
     server.on('error', () => {
       console.error('ERROR: Express could not listen on the configured address.');
       process.exit(1);

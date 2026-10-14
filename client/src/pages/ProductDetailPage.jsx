@@ -6,6 +6,7 @@ import { formatPrice } from '../components/catalog/ProductCard.jsx';
 import PageContainer from '../components/layout/PageContainer.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useCart } from '../cart/CartContext.jsx';
+import RecommendationSection from '../components/catalog/RecommendationSection.jsx';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
@@ -72,6 +73,7 @@ export default function ProductDetailPage() {
           {cart.mutationError && !feedback && <p className="form-error" role="alert">{cart.mutationError.message}</p>}
         </section>
       </div>
+      <RecommendationSection key={product._id} productId={product._id} />
     </PageContainer>
   );
 }

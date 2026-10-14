@@ -4,7 +4,7 @@ Node.js, Express, Mongoose, and MongoDB backend for the UrbanKart CSE494 project
 
 ## Data model
 
-The six SRS collections are `products`, `users`, `carts`, `orders`, `reviews`, and `recommendations`. Checkout adds the operational `checkoutoperations` collection for persistent, user-scoped idempotency. Product specifications preserve the existing Attribute Pattern `attributes: [{ key, value }]`. Cart items and order snapshots are embedded because they are bounded and read with their parent; user/product relationships are references. Reviews remain separate to avoid unbounded growth on Product. Recommendations are a materialized-view schema; generation and serving are later roadmap work.
+The six SRS collections are `products`, `users`, `carts`, `orders`, `reviews`, and `recommendations`. Checkout adds the operational `checkoutoperations` collection for persistent, user-scoped idempotency. Product specifications preserve the existing Attribute Pattern `attributes: [{ key, value }]`. Cart items and order snapshots are embedded because they are bounded and read with their parent; user/product relationships are references. Reviews remain separate to avoid unbounded growth on Product. Recommendations are a nightly, explainable content-similarity materialized view, refreshed by `jobs/recommendationScheduler.js` and read with a labelled same-category fallback.
 
 `scripts/initLocalDatabase.js` installs seven strict MongoDB `$jsonSchema` validators and declared indexes. It requires an explicit `--confirm-local-db <name>`, an exact URI path/database match, `URBANKART_DB_ENV=isolated-development`, a literal loopback `mongodb://` URI, an explicit replica-set name, and a live writable-primary `hello` check whose members are all loopback. `scripts/testDatabaseValidation.js` then attempts one invalid synthetic document per collection and requires MongoDB validation error 121. These checks do not alter Atlas.
 
@@ -16,6 +16,7 @@ The six SRS collections are `products`, `users`, `carts`, `orders`, `reviews`, a
 | `GET /api/products?page=&limit=&search=&category=&sort=` | Public | Text search, exact category filter, pagination, and sort; array response plus `X-Total-*` headers |
 | `GET /api/products/categories` | Public | Sorted categories observed in MongoDB |
 | `GET /api/products/:id` | Public | Product detail |
+| `GET /api/products/:id/recommendations` | Public | Up to five cached, explained related products; falls back to same-category products when the cache is missing or stale |
 | `POST /api/products` | Current database admin | Create whitelisted product fields |
 | `PATCH /api/products/:id` | Current database admin | Update whitelisted product fields |
 | `DELETE /api/products/:id` | Current database admin | Delete product |
@@ -29,6 +30,7 @@ The six SRS collections are `products`, `users`, `carts`, `orders`, `reviews`, a
 | `GET /api/users/me` | Signed in | Public profile fields only |
 | `PATCH /api/users/me` | Signed in | Update the profile name only |
 | `DELETE /api/users/me` | Signed-in customer | Anonymize and deactivate the caller; retained orders keep the user reference |
+| `GET /api/admin/dashboard` | Current database admin | Single `$facet` aggregation for revenue by current product category, top five units sold, and every order status |
 | `GET /api/cart` | Signed in | Read the caller's populated cart |
 | `POST /api/cart/items` | Signed in | Add a product and bounded quantity |
 | `PATCH /api/cart/items/:productId` | Signed in | Set quantity |
@@ -62,6 +64,18 @@ node seed/seedProducts.js --confirm-local-db urbankart_local
 ```
 
 The CSV importer applies the same complete local-member gate before its bounded upserts.
+
+## Day 5 recommendations and analytics
+
+The recommendation score is weighted Jaccard over normalized, unique product tags and `{ key, value }` attributes, plus a `0.2` same-category bonus, capped at `1`. Stored matches include their common tags/attributes and score components. The job ranks candidates deterministically, stores at most five per product, and runs daily at 02:00 in `Asia/Kolkata` by default. `RECOMMENDATION_CRON_SCHEDULE` and `RECOMMENDATION_TIMEZONE` can override that schedule. The job does not recompute the full catalogue during server startup. To run a deliberate local refresh, first point process-scoped safety settings at a separately confirmed disposable loopback replica set, then run:
+
+```powershell
+npm run recommendations:recompute -- --confirm-local-db <database-name>
+```
+
+Admin analytics include `completed`, `shipped`, and `delivered` items in revenue and top-unit counts. Revenue uses historical `priceAtPurchase * qty`; because orders do not snapshot product category, category uses the current Product record. A deleted or missing Product is reported as `Unattributed`. Status counts include all orders. No currency is inferred. The API loads the caller's current database role before aggregation; customers receive `403`.
+
+Day 5 implementation details, source-document mapping, isolated database evidence, and limitations are recorded in [`docs/day-5-recommendations-analytics.md`](../docs/day-5-recommendations-analytics.md).
 
 ## Dataset import
 

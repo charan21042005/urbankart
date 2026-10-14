@@ -1,12 +1,78 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const Product = require('../models/Product');
+const Recommendation = require('../models/Recommendation');
 const { authenticate, loadCurrentUser, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 const MAX_PAGE_SIZE = 100;
 const MAX_BSON_INT32 = 2_147_483_647;
 const PRODUCT_FIELDS = new Set(['name', 'description', 'price', 'stock', 'category', 'attributes', 'tags']);
+const MAX_RECOMMENDATION_CACHE_AGE_MS = 36 * 60 * 60 * 1000;
+
+function normalizeCachedExplanation(item) {
+  return {
+    sharedTags: Array.isArray(item.sharedTags) ? item.sharedTags.filter((tag) => typeof tag === 'string') : [],
+    sharedAttributes: Array.isArray(item.sharedAttributes)
+      ? item.sharedAttributes.filter((attribute) => typeof attribute?.key === 'string' && typeof attribute?.value === 'string')
+      : [],
+    categoryMatch: item.categoryMatch === true,
+    categoryBonus: Number.isFinite(item.categoryBonus) ? item.categoryBonus : 0,
+    sharedFeatureCount: Number.isInteger(item.sharedFeatureCount) ? item.sharedFeatureCount : 0,
+    unionFeatureCount: Number.isInteger(item.unionFeatureCount) ? item.unionFeatureCount : 0
+  };
+}
+
+async function readCachedRecommendations(source, { ProductModel = Product, RecommendationModel = Recommendation, now = Date.now() } = {}) {
+  const cache = await RecommendationModel.findOne({ productId: source._id }).lean();
+  const computedAt = cache?.computedAt ? new Date(cache.computedAt) : null;
+  const cacheIsFresh = computedAt && Number.isFinite(computedAt.getTime())
+    && now - computedAt.getTime() <= MAX_RECOMMENDATION_CACHE_AGE_MS;
+  const sourceId = String(source._id);
+  const cachedItems = Array.isArray(cache?.relatedProducts) ? cache.relatedProducts.filter((item) => {
+    const productId = item?.productId == null ? '' : String(item.productId);
+    return productId && productId !== sourceId && mongoose.isValidObjectId(productId)
+      && Number.isFinite(item.score) && item.score >= 0 && item.score <= 1;
+  }) : [];
+
+  if (cacheIsFresh && cachedItems.length) {
+    const uniqueItems = [...new Map(cachedItems.map((item) => [String(item.productId), item])).values()];
+    const products = await ProductModel.find({ _id: { $in: uniqueItems.map((item) => item.productId) } }).lean();
+    const productsById = new Map(products.map((product) => [String(product._id), product]));
+    const items = uniqueItems.flatMap((item) => {
+      const product = productsById.get(String(item.productId));
+      if (!product || String(product._id) === sourceId) return [];
+      return [{ product, score: item.score, explanation: normalizeCachedExplanation(item) }];
+    });
+    if (items.length) return { source: 'recommendation-engine', computedAt, items };
+  }
+
+  // New products may not have reached the nightly batch yet. If the cache is
+  // absent, stale, empty, or points only to deleted products, return same-
+  // category products by current rating so recommendations never block detail.
+  if (typeof source.category !== 'string' || !source.category.trim()) {
+    return { source: 'fallback', computedAt: null, items: [] };
+  }
+  const fallbackProducts = await ProductModel.find({
+    category: source.category,
+    _id: { $ne: source._id }
+  }).sort({ ratingAvg: -1, ratingCount: -1, _id: 1 }).limit(5).lean();
+  return {
+    source: 'fallback',
+    computedAt: null,
+    items: fallbackProducts.map((product) => ({
+      product,
+      score: null,
+      explanation: {
+        type: 'same-category-rating-fallback',
+        categoryMatch: true,
+        categoryName: source.category,
+        sharedTags: [],
+        sharedAttributes: []
+      }
+    }))
+  };
+}
 
 function parsePositiveInteger(value, fallback) {
   if (value === undefined) return fallback;
@@ -124,6 +190,21 @@ router.get('/categories', async (req, res) => {
   }
 });
 
+router.get('/:id/recommendations', async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ status: 'error', message: 'Product ID is invalid.' });
+  }
+  try {
+    const source = await Product.findById(req.params.id).lean();
+    if (!source) return res.status(404).json({ status: 'error', message: 'Product not found.' });
+    const result = await readCachedRecommendations(source);
+    return res.status(200).json({ status: 'success', ...result });
+  } catch (error) {
+    console.error(`Product recommendation lookup failed (${error?.name || 'Error'}).`);
+    return res.status(500).json({ status: 'error', message: 'Could not retrieve product recommendations.' });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ status: 'error', message: 'Product ID is invalid.' });
@@ -185,3 +266,5 @@ router.delete('/:id', authenticate, loadCurrentUser, requireAdmin, async (req, r
 });
 
 module.exports = router;
+module.exports.readCachedRecommendations = readCachedRecommendations;
+module.exports.MAX_RECOMMENDATION_CACHE_AGE_MS = MAX_RECOMMENDATION_CACHE_AGE_MS;

@@ -6,10 +6,11 @@ import { AuthProvider } from '../auth/AuthContext.jsx';
 import { CartProvider } from '../cart/CartContext.jsx';
 import { clearAccessToken } from '../api/tokenStore.js';
 import { getCategories, getProduct, getProducts } from '../api/productApi.js';
+import { getRecommendations } from '../api/productApi.js';
 import { addCartItem, clearCart, getCart, removeCartItem, setCartItemQuantity } from '../api/cartApi.js';
 import { login, register } from '../api/authApi.js';
 
-vi.mock('../api/productApi.js', () => ({ getCategories: vi.fn(), getProduct: vi.fn(), getProducts: vi.fn() }));
+vi.mock('../api/productApi.js', () => ({ getCategories: vi.fn(), getProduct: vi.fn(), getProducts: vi.fn(), getRecommendations: vi.fn() }));
 vi.mock('../api/authApi.js', () => ({ login: vi.fn(), register: vi.fn() }));
 vi.mock('../api/cartApi.js', () => ({
   getCart: vi.fn(), addCartItem: vi.fn(), setCartItemQuantity: vi.fn(), removeCartItem: vi.fn(), clearCart: vi.fn()
@@ -24,12 +25,13 @@ const signedIn = () => login.mockResolvedValue({ status: 'success', token: 'opaq
 
 beforeEach(() => {
   clearAccessToken();
-  getProducts.mockReset(); getCategories.mockReset(); getProduct.mockReset(); login.mockReset(); register.mockReset();
+  getProducts.mockReset(); getCategories.mockReset(); getProduct.mockReset(); getRecommendations.mockReset(); login.mockReset(); register.mockReset();
   getCart.mockReset(); addCartItem.mockReset(); setCartItemQuantity.mockReset(); removeCartItem.mockReset(); clearCart.mockReset();
   getCart.mockResolvedValue({ items: [] });
   getProducts.mockResolvedValue({ products: [product], pagination: { totalCount: 1, page: 1, pageSize: 20, totalPages: 1 } });
   getCategories.mockResolvedValue(['Accessories']);
   getProduct.mockResolvedValue(product);
+  getRecommendations.mockResolvedValue({ status: 'success', source: 'fallback', items: [] });
 });
 
 describe('Stage C catalogue and detail', () => {

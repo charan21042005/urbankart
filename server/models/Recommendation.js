@@ -1,45 +1,32 @@
-// 1. Import Mongoose to define the schema
 const mongoose = require('mongoose');
 
-// 2. Define the Recommendation Schema (The Materialized View Pattern).
-// Calculating "Users who bought X also bought Y" takes immense computing power.
-// Instead of calculating it on-the-fly when a user loads a page, a background system will calculate it
-// overnight and save the final result here. This makes reading the recommendations incredibly fast.
+const sharedAttributeSchema = new mongoose.Schema({
+  key: { type: String, required: true, trim: true, maxlength: 120 },
+  value: { type: String, required: true, trim: true, maxlength: 120 }
+}, { _id: false });
+
+const relatedProductSchema = new mongoose.Schema({
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+  score: { type: Number, required: true, min: 0, max: 1 },
+  sharedTags: { type: [{ type: String, trim: true, maxlength: 120 }], default: [] },
+  sharedAttributes: { type: [sharedAttributeSchema], default: [] },
+  categoryMatch: { type: Boolean, default: false },
+  categoryBonus: { type: Number, min: 0, max: 0.2, default: 0 },
+  sharedFeatureCount: { type: Number, min: 0, validate: Number.isInteger, default: 0 },
+  unionFeatureCount: { type: Number, min: 0, validate: Number.isInteger, default: 0 }
+}, { _id: false });
+
+// A separate collection is the materialized cache for this batch-recomputed view.
 const recommendationSchema = new mongoose.Schema({
-  // The main source product we are generating recommendations for.
-  productId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Product', 
-    required: true, 
-    // A product can only have one active recommendation list at a time
-    unique: true 
-  },
-  
-  // An array of products that are statistically related to the main product.
-  relatedProducts: [{
-    // The related product's ID
-    productId: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: 'Product', 
-      required: true 
-    },
-    // The algorithmic similarity score (e.g. how strongly they are related)
-    score: { 
-      type: Number, 
-      required: true,
-      min: 0,
-      max: 1
-    }
-  }],
-  
-  // When this recommendation was generated. Helps us know if the data is stale/old.
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
+  relatedProducts: { type: [relatedProductSchema], default: [] },
   computedAt: { type: Date, required: true }
 });
 
+recommendationSchema.index({ productId: 1 }, { unique: true, name: 'uniq_recommendation_source' });
 recommendationSchema.path('relatedProducts').validate(
   (products) => products.length <= 5,
   'A recommendation cache may contain at most five products.'
 );
 
-// 3. Compile the schema into a Mongoose model named 'Recommendation' and export it
 module.exports = mongoose.model('Recommendation', recommendationSchema);

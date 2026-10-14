@@ -1,0 +1,35 @@
+const mongoose = require('mongoose');
+const safety = require('./databaseSafety');
+const Product = require('../models/Product');
+const Recommendation = require('../models/Recommendation');
+const { recomputeRecommendations } = require('../jobs/computeRecommendations');
+
+async function main() {
+  const target = await safety.connectAfterPreflight({
+    mode: 'local-write',
+    argv: process.argv.slice(2),
+    connect: (uri) => mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10_000,
+      autoIndex: false,
+      autoCreate: false
+    })
+  });
+  const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+  safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
+  await Promise.all([Product, Recommendation].map((model) => model.createIndexes()));
+  const indexes = await Recommendation.collection.indexes();
+  if (!indexes.some((index) => index.name === 'uniq_recommendation_source'
+      && index.unique === true && index.key.productId === 1)) {
+    throw new safety.SafetyError('The required unique recommendation-source index is unavailable.');
+  }
+  const result = await recomputeRecommendations();
+  console.log(JSON.stringify({ database: target.databaseName, replicaSet: hello.setName, ...result }));
+}
+
+main().catch((error) => {
+  if (error instanceof safety.SafetyError) console.error(`Recommendation recompute refused: ${error.message}`);
+  else console.error(`Recommendation recompute failed (${error?.name || 'Error'}); details were suppressed.`);
+  process.exitCode = 1;
+}).finally(async () => {
+  if (mongoose.connection.readyState !== 0) await mongoose.disconnect().catch(() => {});
+});

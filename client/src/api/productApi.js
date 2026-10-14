@@ -37,3 +37,14 @@ export async function getProduct(id, { signal } = {}) {
   }
   return data;
 }
+
+export async function getRecommendations(id, { signal } = {}) {
+  const { data } = await httpClient.get(`/products/${encodeURIComponent(id)}/recommendations`, { signal });
+  if (!data || data.status !== 'success' || !['recommendation-engine', 'fallback'].includes(data.source)
+      || !Array.isArray(data.items)) {
+    throw new Error('The recommendation service returned an unexpected response.');
+  }
+  const items = data.items.filter((item) => item?.product && typeof item.product._id === 'string'
+    && (item.score === null || (Number.isFinite(item.score) && item.score >= 0 && item.score <= 1)));
+  return { source: data.source, computedAt: data.computedAt || null, items };
+}

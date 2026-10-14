@@ -9,6 +9,7 @@ import './styles/global.css';
 import './styles/components.css';
 import './styles/pages.css';
 import './styles/storefront.css';
+import './styles/day5.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>

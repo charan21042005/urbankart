@@ -107,7 +107,20 @@ const collectionValidators = Object.freeze({
         items: object(['productId', 'score'], {
           _id: objectId,
           productId: reference,
-          score: { bsonType: ['double', 'int', 'long', 'decimal'], minimum: 0, maximum: 1 }
+          score: { bsonType: ['double', 'int', 'long', 'decimal'], minimum: 0, maximum: 1 },
+          sharedTags: { bsonType: 'array', maxItems: 50, items: { bsonType: 'string', maxLength: 120 } },
+          sharedAttributes: {
+            bsonType: 'array',
+            maxItems: 50,
+            items: object(['key', 'value'], {
+              key: { bsonType: 'string', minLength: 1, maxLength: 120 },
+              value: { bsonType: 'string', minLength: 1, maxLength: 120 }
+            })
+          },
+          categoryMatch: { bsonType: 'bool' },
+          categoryBonus: { bsonType: ['double', 'int', 'long', 'decimal'], minimum: 0, maximum: 0.2 },
+          sharedFeatureCount: wholeNumber,
+          unionFeatureCount: wholeNumber
         })
       },
       computedAt: date

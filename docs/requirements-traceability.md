@@ -41,6 +41,15 @@ No photographs, third-party image URLs, or external image services are used by t
 
 The historical statuses and outstanding items below describe the earlier run. For current evidence, use the updated source-document findings, requirement-to-evidence matrix, browser journey/screenshots, database state audit, and quality results in [Days 1–4 Acceptance Follow-up — 2026-10-13](days-1-4-acceptance-follow-up-2026-10-13.md). That report supersedes older browser-blocked statuses where it records new verified evidence. Current overall verdict is **PARTIALLY ACCEPTED**; dataset declaration is **`DECLARED_CC_BY_SA_4_0`** and overall redistribution clearance is **AMBER**.
 
-## Scope and outstanding items
+## Day 5 traceability — 2026-10-14
 
-Days 5–6 recommendation generation, analytics, reviews, and performance benchmarking remain outside this Days 1–4 closeout unless already present as schema or scaffolding. The source-doc recovery, fresh isolated database integration, live API, browser interaction, and dataset redistribution determination remain outstanding; see the dataset assessment and existing `_day-notes/day-01-04/DAYS_01_04_COMPLETION.md` for prior evidence and setup details.
+The requested SRS Blueprint, 6-Day Roadmap, and Day 5 DeepDive DOCX references have now been read from the user-provided paths. Their Day 5 recommendations and analytics requirements were implemented and verified; see [Day 5 Recommendations and Admin Analytics](day-5-recommendations-analytics.md) for the requirement mapping, calculations, isolated database details, and limitations.
+
+| ID / source | Expected behaviour | Implementation | Evidence and status |
+|---|---|---|---|
+| D5-01 / SRS FR-7, §10.3, Appendix B.3; DeepDive §4 | Up to five related products, explainable similarity score, deterministic batch cache | `server/jobs/similarityScorer.js`, `computeRecommendations.js`, `Recommendation.js` | 81 server tests; isolated local MongoDB persisted and served expected related product/explanation. **PASS** |
+| D5-02 / Roadmap Day 5; DeepDive §§4, 7, 8 | Scheduled refresh; same-category fallback when recommendations are missing or stale | `server/jobs/recommendationScheduler.js`, product route, storefront section | Scheduler and route tests; isolated HTTP cache/fallback check. **PASS** |
+| D5-03 / SRS FR-8, §§10.4, 11, Appendix B.4 | Admin-only revenue/category, top products, and order-status dashboard using one aggregation | `server/analytics/buildDashboardPipeline.js`, `server/routes/adminRoutes.js` | Customer denied/admin allowed; one `$facet`; hand-calculated local MongoDB analytics matched. **PASS** |
+| D5-04 / SRS §12; Roadmap and DeepDive acceptance criteria | Verify frontend states and chart data integration | `client/src/pages/AdminDashboard.jsx`, `RecommendationSection.jsx`, API clients | Client tests 60/60; build passed. **PASS** |
+
+The prior Day 1–4 evidence and limitations remain historical/current as individually labelled above. Day 6 reviews and performance benchmarking are outside this task. Dataset licence declaration and third-party rights stay separately documented in [`dataset-provenance.md`](dataset-provenance.md): declaration `DECLARED_CC_BY_SA_4_0`, overall redistribution clearance `AMBER`.
