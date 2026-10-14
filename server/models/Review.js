@@ -35,8 +35,8 @@ const reviewSchema = new mongoose.Schema({
     }
   },
   
-  // The optional text comment left by the user. 'trim' cleans up accidental spaces.
-  comment: { type: String, trim: true, maxlength: 4000 }
+  // The optional review text. 'trim' cleans up accidental spaces.
+  text: { type: String, trim: true, maxlength: 4000 }
 }, { 
   // Automatically manage 'createdAt' and 'updatedAt' timestamps
   timestamps: true 

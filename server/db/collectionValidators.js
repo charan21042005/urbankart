@@ -91,7 +91,7 @@ const collectionValidators = Object.freeze({
       productId: reference,
       userId: reference,
       rating: { bsonType: ['double', 'int', 'long'], minimum: 1, maximum: 5, multipleOf: 1 },
-      comment: { bsonType: 'string', maxLength: 4000 },
+      text: { bsonType: 'string', maxLength: 4000 },
       ...timestamps
     }
   ),

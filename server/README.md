@@ -20,6 +20,11 @@ The six SRS collections are `products`, `users`, `carts`, `orders`, `reviews`, a
 | `POST /api/products` | Current database admin | Create whitelisted product fields |
 | `PATCH /api/products/:id` | Current database admin | Update whitelisted product fields |
 | `DELETE /api/products/:id` | Current database admin | Delete product |
+| `GET /api/reviews/product/:productId?page=&limit=` | Public | Paginated product reviews, newest first, with total/page headers |
+| `GET /api/reviews/:id` | Public | Retrieve one review |
+| `POST /api/reviews` | Signed in | Create a review for an existing product; author ID is taken from the current account |
+| `PATCH /api/reviews/:id` | Review author | Update rating and/or text |
+| `DELETE /api/reviews/:id` | Review author | Delete a review |
 | `POST /api/auth/register` | Public | bcrypt password hash, customer role, JWT and public user response |
 | `POST /api/auth/login` | Public | Verify credentials and return JWT/public user |
 | `GET /api/users?page=&limit=` | Current database admin | Paginated customer list; password hashes are never selected or returned |
@@ -42,6 +47,8 @@ The six SRS collections are `products`, `users`, `carts`, `orders`, `reviews`, a
 Registration ignores client roles. Protected admin mutations load the current user role from MongoDB, so deleted or demoted admins lose access. Profile editing is limited to `name`. Customer self-closure replaces the name, email, and password hash with non-identifying tombstone values and marks the account inactive; existing order references remain intact. Inactive accounts cannot log in or use an old token. Administrator self-closure is rejected.
 
 Administrative user CRUD is limited to customer accounts. Admin routes never accept a role or `isActive` field; new accounts are always customers, and existing administrator provisioning remains a trusted out-of-band operation. Create responses and customer reads omit password hashes. Deletion anonymizes/deactivates instead of physically deleting so historical order references remain valid. Offline route tests cover current-role authorization, whitelisted fields, password hashing, and tombstone behavior; this does not replace live browser verification.
+
+Reviews use the SRS `productId`, `userId`, `rating`, and optional `text` fields in the referenced `reviews` collection. `userId` comes from the authenticated account; rating is an integer from 1 through 5; text is trimmed and limited to 4,000 characters. Public reads support `page` and `limit` (default 1 and 20, maximum 100); list responses use `{ status, reviews }` and `X-Total-Count`, `X-Page`, and `X-Page-Size` headers. Single-review reads return `{ status, review }`. Create returns that shape with HTTP 201; update returns it with HTTP 200; delete returns `{ status, message }` with HTTP 200. Malformed values return 400, missing authentication 401, non-author mutations 403, missing products/reviews 404, and sanitized storage failures 500. Mutations run in a MongoDB transaction and recompute Product `ratingAvg`/`ratingCount` from the review collection, so edits and deletions are reflected accurately. A user may create more than one review per product because neither the SRS nor existing index imposes uniqueness. Verified purchase is not required by the SRS. Admins have no ownership override: update/delete require the author. This backend CRUD does not add a customer review UI because the SRS storefront feature list does not require one.
 
 ## Safe local setup
 

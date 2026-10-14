@@ -23,4 +23,8 @@ test('database validators preserve the existing key/value Attribute Pattern and 
   assert.deepEqual(collectionValidators.carts.properties.userId, { bsonType: 'objectId' });
   assert.deepEqual(collectionValidators.orders.properties.customerId, { bsonType: 'objectId' });
   assert.deepEqual(collectionValidators.users.properties.isActive, { bsonType: 'bool' });
+  const review = collectionValidators.reviews;
+  assert.deepEqual(review.required, ['productId', 'userId', 'rating']);
+  assert.deepEqual(review.properties.text, { bsonType: 'string', maxLength: 4000 });
+  assert.equal(Object.hasOwn(review.properties, 'comment'), false);
 });
