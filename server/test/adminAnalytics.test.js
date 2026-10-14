@@ -19,8 +19,8 @@ function token(subject, role = 'customer', expiresIn = '1h') {
   });
 }
 
-async function request(headers = {}) {
-  return fetch(`${baseUrl}/api/admin/dashboard`, { headers });
+async function request(headers = {}, path = '/dashboard') {
+  return fetch(`${baseUrl}/api/admin${path}`, { headers });
 }
 
 test('analytics route server starts with test-only JWT configuration', async () => {
@@ -41,7 +41,34 @@ test('analytics route rejects unauthenticated, invalid, expired and current-cust
   assert.equal((await request({ authorization: 'Bearer invalid-token' })).status, 401);
   assert.equal((await request({ authorization: `Bearer ${token(customerId, 'customer', '-1s')}` })).status, 401);
   assert.equal((await request({ authorization: `Bearer ${token(customerId, 'admin')}` })).status, 403);
+  for (const path of ['/overview', '/users', `/users/${customerId}/cart`, '/orders', `/orders/${customerId}`, '/reviews']) {
+    assert.equal((await request({ authorization: `Bearer ${token(customerId, 'customer')}` }, path)).status, 403, `${path} is admin-only`);
+  }
   assert.equal(aggregate.mock.callCount(), 0);
+});
+
+test('overview endpoint reports database-derived totals and stays behind current-role authorization', async (t) => {
+  t.mock.method(User, 'findById', () => ({ select: async () => ({ _id: adminId, role: 'admin', isActive: true }) }));
+  const Product = require('../models/Product');
+  const Cart = require('../models/Cart');
+  const Review = require('../models/Review');
+  t.mock.method(Product, 'countDocuments', async () => 19159);
+  t.mock.method(Product, 'aggregate', async () => [{ _id: 'Clothing', count: 500 }]);
+  t.mock.method(User, 'countDocuments', async () => 7);
+  t.mock.method(Order, 'countDocuments', async () => 3);
+  t.mock.method(Review, 'aggregate', async () => [{ count: 2, averageRating: 4.5 }]);
+  t.mock.method(Cart, 'aggregate', async () => [{ activeCarts: 1, itemCount: 2 }]);
+  t.mock.method(Order, 'aggregate', async (pipeline) => pipeline[0].$facet
+    ? [{ revenueByCategory: [], topProducts: [], orderStatusBreakdown: [{ status: 'pending', count: 3 }] }]
+    : [{ _id: 'pending', count: 3 }]);
+  const response = await request({ authorization: `Bearer ${token(adminId, 'admin')}` }, '/overview');
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.metrics.productCount, 19159);
+  assert.equal(body.metrics.activeUserCount, 7);
+  assert.equal(body.metrics.averageReviewRating, 4.5);
+  assert.equal(body.metrics.activeCartCount, 1);
+  assert.deepEqual(body.metrics.orderStatusBreakdown, [{ status: 'pending', count: 3 }]);
 });
 
 test('analytics route permits a database-confirmed admin and executes one facet aggregation', async (t) => {

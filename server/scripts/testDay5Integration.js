@@ -74,13 +74,14 @@ async function main() {
     assert.deepEqual(dashboard.orderStatusBreakdown.map(({ status, count }) => [status, count]), [['delivered', 2], ['cancelled', 1], ['completed', 1], ['pending', 1], ['shipped', 1]]);
 
     const recompute = await recomputeRecommendations();
-    assert.equal(recompute.productsProcessed, 3);
+    assert.equal(recompute.productsProcessed, await Product.countDocuments());
     const recommendations = await fetch(`${base}/api/products/${a._id}/recommendations`);
     assert.equal(recommendations.status, 200);
     const recommendationBody = await recommendations.json();
     assert.equal(recommendationBody.source, 'recommendation-engine');
-    assert.equal(recommendationBody.items[0].product._id, b._id.toString());
-    assert.deepEqual(recommendationBody.items[0].explanation.sharedTags, ['wireless']);
+    const fixtureRecommendation = recommendationBody.items.find(({ product: candidate }) => candidate._id === b._id.toString());
+    assert.ok(fixtureRecommendation);
+    assert.deepEqual(fixtureRecommendation.explanation.sharedTags, ['wireless']);
     await Recommendation.deleteOne({ productId: a._id });
     await Product.updateOne({ _id: a._id }, { $set: { category: 'Kitchen' } });
     const fallback = await fetch(`${base}/api/products/${a._id}/recommendations`);

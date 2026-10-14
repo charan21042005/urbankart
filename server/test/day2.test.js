@@ -10,6 +10,7 @@ const app = require('../app');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const Cart = require('../models/Cart');
+const Review = require('../models/Review');
 const Order = require('../models/Order');
 const CheckoutOperation = require('../models/CheckoutOperation');
 const {
@@ -384,6 +385,8 @@ test('admin can create, update, and delete products with whitelisted fields', as
   const adminHeader = { authorization: `Bearer ${makeToken('admin')}` };
   const created = { _id: id, name: 'Keyboard', category: 'Electronics', price: 10 };
   t.mock.method(User, 'findById', () => ({ select: async () => ({ role: 'admin' }) }));
+  t.mock.method(Cart, 'exists', async () => null);
+  t.mock.method(Review, 'exists', async () => null);
   t.mock.method(Product, 'create', async (payload) => ({ ...payload, _id: id }));
   const updateDoc = {
     _id: id,
@@ -415,6 +418,17 @@ test('admin can create, update, and delete products with whitelisted fields', as
 
   const deleted = await request(`/api/products/${id}`, { method: 'DELETE', headers: adminHeader });
   assert.equal(deleted.status, 200);
+});
+
+test('admin cannot delete a product referenced by a current cart or a review', async (t) => {
+  const id = new mongoose.Types.ObjectId();
+  t.mock.method(User, 'findById', () => ({ select: async () => ({ role: 'admin' }) }));
+  t.mock.method(Cart, 'exists', async () => ({ _id: new mongoose.Types.ObjectId() }));
+  t.mock.method(Review, 'exists', async () => null);
+  const deletion = t.mock.method(Product, 'findByIdAndDelete', async () => ({ _id: id }));
+  const response = await request(`/api/products/${id}`, { method: 'DELETE', headers: { authorization: `Bearer ${makeToken('admin')}` } });
+  assert.equal(response.status, 409);
+  assert.equal(deletion.mock.callCount(), 0);
 });
 
 test('older admin tokens lose mutation access after demotion or account deletion', async (t) => {

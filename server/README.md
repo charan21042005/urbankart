@@ -36,6 +36,11 @@ The six SRS collections are `products`, `users`, `carts`, `orders`, `reviews`, a
 | `PATCH /api/users/me` | Signed in | Update the profile name only |
 | `DELETE /api/users/me` | Signed-in customer | Anonymize and deactivate the caller; retained orders keep the user reference |
 | `GET /api/admin/dashboard` | Current database admin | Single `$facet` aggregation for revenue by current product category, top five units sold, and every order status |
+| `GET /api/admin/overview` | Current database admin | Product/category, active-account, order/status, review/rating and active-cart metrics from MongoDB |
+| `GET /api/admin/users?page=&limit=&search=` and `/api/admin/users/:id` | Current database admin | Paginated safe user fields and detail; no password hashes or tokens |
+| `GET /api/admin/users/:id/cart` | Current database admin | Read-only view of the selected user's current cart and current-price total |
+| `GET /api/admin/orders?page=&limit=` and `/api/admin/orders/:id` | Current database admin | Paginated order snapshots and details; no status mutation workflow |
+| `GET /api/admin/reviews?page=&limit=` | Current database admin | Paginated persisted reviews with safe product/customer projections |
 | `GET /api/cart` | Signed in | Read the caller's populated cart |
 | `POST /api/cart/items` | Signed in | Add a product and bounded quantity |
 | `PATCH /api/cart/items/:productId` | Signed in | Set quantity |
@@ -94,7 +99,11 @@ npm.cmd run import:products -- --dry-run
 npm.cmd run import:products -- --import --stock-default 0 --confirm-local-db urbankart_local
 ```
 
-The latest local dry run parsed 20,000 rows: 19,159 valid unique normalized products, 841 rejected (78 invalid prices and 763 duplicate products among the counted rejection reasons), 2 repeated product IDs, no repeated `uniq_id`, and 11,249 specification pairs without a key/value mapping. The isolated import count was 19,159. It was performed only in a task-owned disposable local database that has since been removed; it is not a current persistent catalog count. Price values remain currency-unspecified.
+Historical import evidence before 2026-10-14 described a separate task-owned local database. The current acceptance import and actual API count are recorded in [catalog recovery evidence](../docs/evidence/final-catalog-recovery-2026-10-14.json). The latest dry run parsed 20,000 rows: 19,159 valid normalized products and 841 rejects; a guarded import inserted 19,159 into `urbankart_acceptance_20261014`, and a repeat import matched all rows without adding duplicates. The active API serves 19,165 records including six preserved synthetic demo products. Imported stock is 0 because inventory is absent from the source. Price values remain currency-unspecified.
+
+### Guarded local administrator setup
+
+Use `npm.cmd run admin:setup:local -- --confirm-local-db <database-name>` after setting the explicit loopback replica-set URI, expected database name, `URBANKART_DB_ENV=isolated-development`, transaction-topology confirmation, and replica-set name. The command prompts for email and a hidden password, creates an admin with bcrypt or verifies an existing account password and requires explicit `PROMOTE` confirmation before role change. It refuses remote targets, unknown database names, standalone topology, and inactive accounts. Never expose admin creation through a public route. See the [final evaluation runbook](../docs/final-e2e-demonstration-runbook.md) for exact PowerShell commands.
 
 ### Persistent local development catalog
 

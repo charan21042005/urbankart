@@ -2,6 +2,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const Product = require('../models/Product');
 const Recommendation = require('../models/Recommendation');
+const Cart = require('../models/Cart');
+const Review = require('../models/Review');
 const { authenticate, loadCurrentUser, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
@@ -257,6 +259,13 @@ router.delete('/:id', authenticate, loadCurrentUser, requireAdmin, async (req, r
     return res.status(400).json({ status: 'error', message: 'Product ID is invalid.' });
   }
   try {
+    const [cartReference, reviewReference] = await Promise.all([
+      Cart.exists({ 'items.productId': req.params.id }),
+      Review.exists({ productId: req.params.id })
+    ]);
+    if (cartReference || reviewReference) {
+      return res.status(409).json({ status: 'error', message: 'Product is referenced by a current cart or review and cannot be deleted.' });
+    }
     const product = await Product.findByIdAndDelete(req.params.id);
     if (!product) return res.status(404).json({ status: 'error', message: 'Product not found.' });
     return res.status(200).json({ status: 'success', message: 'Product deleted.' });
