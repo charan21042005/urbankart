@@ -4,21 +4,24 @@ Date: 2026-10-14. This is a native Windows/PowerShell walkthrough for a local, d
 
 ## Current audit instance
 
-The final audit has the API and Vite running on loopback at `http://127.0.0.1:5002` and `http://127.0.0.1:5174/`, respectively, backed by the isolated `urbankart_acceptance_20261014` database on replica set `ukAcceptance20261014` at `127.0.0.1:27230`. The server and Vite proxy health checks returned 200. The customer/admin HTTP walkthrough passed and its test accounts, checkout products, reviews, carts, orders, and checkout records were removed by captured IDs. I then prepared six original synthetic catalog products and six recommendation cache documents for immediate browsing; the database has zero users and orders. The acceptance database has seven validated collections. The unrelated Windows MongoDB service on port 27017 is a standalone server; it was not used for writes.
+The final audit has the API and Vite running on loopback at `http://127.0.0.1:5002` and `http://127.0.0.1:5174/`, backed by isolated `urbankart_acceptance_20261014` on replica set `ukAcceptance20261014` at `127.0.0.1:27230`. The CSV dry run found 20,000 rows/19,159 valid candidates; a guarded import inserted all 19,159 and a repeat import matched all 19,159 without duplicates or failed writes. The database now has 19,165 products: those imported rows plus six preserved “Academic Demo” synthetic products from the prior demo. Imported records have stock 0 because the CSV contains no inventory field; use the clearly named synthetic products for checkout. One pre-existing customer account was preserved; the database currently has no orders or reviews. All seven collections have validators. Current catalogue and admin read endpoints, role denials, and exact temporary product CRUD were HTTP-verified. The unrelated Windows MongoDB standalone service on port 27017 was not used for writes.
 
-The walkthrough was HTTP/API-level. Chrome previously exited with GPU process error `-1073741790`; no current GUI screenshot or visual acceptance is claimed. The app can be opened at the Vite URL for evaluator-led browser checks.
+The walkthrough was HTTP/API-level. Full-catalog recommendations have now been batch recomputed and persisted; a read-only count confirmed 19,165 recommendation documents for 19,165 products. Chrome previously exited with GPU process error `-1073741790`; no current GUI screenshot or visual acceptance is claimed. The app can be opened at the Vite URL for evaluator-led browser checks.
 
-To use the current already-running instance, open `http://127.0.0.1:5174/`. It has six synthetic products with recommendation caches; register a disposable customer to demonstrate browsing/cart/checkout. To provision a separate admin for this instance, register another disposable account, then in a PowerShell terminal run the following only after verifying the printed DB and replica-set identity. Log in again after promotion. Keep a separate customer account for the 403 check.
+To use the current already-running instance, open `http://127.0.0.1:5174/`. The storefront is API-backed and reports the full 19,165-product total; search `Academic Demo` to find the preserved synthetic, stock-positive checkout products. Imported CSV records are browseable but intentionally stock 0. Register a disposable customer for checkout and access-denial checks. The API was restarted on 2026-10-14, so sign in again to obtain a current token.
 
 ```powershell
 $env:MONGODB_URI='mongodb://127.0.0.1:27230/urbankart_acceptance_20261014?replicaSet=ukAcceptance20261014'
 mongosh.exe $env:MONGODB_URI --quiet --eval "const h=db.hello(); printjson({database:db.getName(),replicaSet:h.setName,isWritablePrimary:h.isWritablePrimary})"
-$adminEmail = Read-Host 'Registered disposable account email'
-if ($adminEmail -notmatch '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') { throw 'Enter the email of the disposable account you just registered.' }
-mongosh.exe $env:MONGODB_URI --quiet --eval "const r=db.users.updateOne({email:'$adminEmail'}, {`$set:{role:'admin'}}); printjson({matched:r.matchedCount,modified:r.modifiedCount})"
+$env:URBANKART_EXPECTED_DB_NAME='urbankart_acceptance_20261014'
+$env:URBANKART_DB_ENV='isolated-development'
+$env:URBANKART_TXN_TOPOLOGY_CONFIRMED='replicaSet'
+$env:URBANKART_TXN_REPLICA_SET_NAME='ukAcceptance20261014'
+cd 'C:\Users\Tokachichu SriCharan\OneDrive\Documents\GitHub\urbankart\server'
+npm.cmd run admin:setup:local -- --confirm-local-db urbankart_acceptance_20261014
 ```
 
-This current instance uses API port 5002 and Vite port 5174. The later clean-start instructions below use API 5000 and Vite 5173 instead.
+The setup command asks for account email/password (password input is hidden). It creates a new admin with bcrypt or verifies an existing account password before asking for the exact word `PROMOTE`; it refuses remote/non-replica-set targets and inactive accounts. Log in through the app after setup. Keep a separate customer account for the 403 check. This instance uses API port 5002 and Vite port 5174; clean-start instructions below use 5000/5173.
 
 ## Prerequisites and isolated local database
 
@@ -53,6 +56,9 @@ $env:URBANKART_DB_ENV='isolated-development'
 $env:URBANKART_TXN_TOPOLOGY_CONFIRMED='replicaSet'
 $env:URBANKART_TXN_REPLICA_SET_NAME='ukAcademicDemo'
 npm.cmd run db:init:local -- --confirm-local-db urbankart_academic_demo
+# Recheck the source before writing; CSV import is safe to repeat with the same stock policy.
+npm.cmd run import:products -- --dry-run
+npm.cmd run import:products -- --import --stock-default 0 --confirm-local-db urbankart_academic_demo
 $env:HOST='127.0.0.1'
 $env:PORT='5000'
 $bytes=New-Object byte[] 48
@@ -81,33 +87,21 @@ Open `http://127.0.0.1:5173/`; confirm the homepage renders and `http://127.0.0.
 ## Prepare safe demo data and accounts
 
 1. Register an evaluator-owned disposable account in the app. Registration always creates a customer and ignores a submitted role.
-2. If demonstrating the admin dashboard, promote only that disposable account out of band in the **confirmed local academic database**, then log in again to obtain a fresh session. In a separate PowerShell terminal, set and verify the same local-only URI before running the update:
+2. To provision a local admin, use the guarded setup command from a separate PowerShell terminal. For the clean-start example, set these process values first:
 
    ```powershell
+   $repo = 'C:\Users\Tokachichu SriCharan\OneDrive\Documents\GitHub\urbankart'
+   cd "$repo\server"
    $env:MONGODB_URI='mongodb://127.0.0.1:27240/urbankart_academic_demo?replicaSet=ukAcademicDemo'
-   mongosh.exe $env:MONGODB_URI --quiet --eval "const h=db.hello(); printjson({database:db.getName(),replicaSet:h.setName,isWritablePrimary:h.isWritablePrimary})"
-   $adminEmail = Read-Host 'Registered disposable account email'
-   if ($adminEmail -notmatch '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') { throw 'Enter the email of the disposable account you just registered.' }
-   mongosh.exe $env:MONGODB_URI --quiet --eval "const r=db.users.updateOne({email:'$adminEmail'}, {`$set:{role:'admin'}}); printjson({matched:r.matchedCount,modified:r.modifiedCount})"
+   $env:URBANKART_EXPECTED_DB_NAME='urbankart_academic_demo'
+   $env:URBANKART_DB_ENV='isolated-development'
+   $env:URBANKART_TXN_TOPOLOGY_CONFIRMED='replicaSet'
+   $env:URBANKART_TXN_REPLICA_SET_NAME='ukAcademicDemo'
+   npm.cmd run admin:setup:local -- --confirm-local-db urbankart_academic_demo
    ```
 
-   This is trusted local provisioning, not a public admin-registration feature. Never run it unless the replica-set/database identity checks match the values above. Keep a separate customer account for the access-denial demonstration.
-3. Product CRUD is exposed by the protected API; the storefront has no product-management page. This PowerShell sequence prompts for the disposable admin credentials without printing the password/token, logs in, and creates two synthetic products. Run it after promoting the admin and logging in again; do not paste credentials into shell history. Do not import the raw Kaggle CSV merely for the demo.
-
-   ```powershell
-   $adminEmail = Read-Host 'Admin email'
-   $securePassword = Read-Host 'Admin password' -AsSecureString
-   $adminPassword = [Net.NetworkCredential]::new('', $securePassword).Password
-   $loginBody = @{ email=$adminEmail; password=$adminPassword } | ConvertTo-Json -Compress
-   $login = Invoke-RestMethod -Uri 'http://127.0.0.1:5000/api/auth/login' -Method Post -ContentType 'application/json' -Body $loginBody
-   $adminToken = $login.token
-   $headers = @{ Authorization = "Bearer $adminToken" }
-   $first = @{ name='Demo Wireless Keyboard'; description='Synthetic academic demo item'; category='Demo Electronics'; price=25; stock=10; tags=@('demo','wireless','keyboard'); attributes=@(@{key='Connectivity';value='Wireless'}) }
-   $second = @{ name='Demo Wireless Mouse'; description='Synthetic academic demo item'; category='Demo Electronics'; price=15; stock=10; tags=@('demo','wireless','mouse'); attributes=@(@{key='Connectivity';value='Wireless'}) }
-   $p1 = Invoke-RestMethod -Uri 'http://127.0.0.1:5000/api/products' -Method Post -Headers $headers -ContentType 'application/json' -Body ($first | ConvertTo-Json -Depth 5 -Compress)
-   $p2 = Invoke-RestMethod -Uri 'http://127.0.0.1:5000/api/products' -Method Post -Headers $headers -ContentType 'application/json' -Body ($second | ConvertTo-Json -Depth 5 -Compress)
-   Remove-Variable securePassword,adminPassword,loginBody,login,adminToken,headers
-   ```
+   Password input is hidden. The script uses bcrypt for a new account; for an existing user it verifies the current password and requires the explicit word `PROMOTE` before changing a customer role. The command confirms the database name and live loopback replica-set identity. It never creates a public admin-registration endpoint. Keep a separate customer account for the 403 demonstration.
+3. The React `/admin` page provides Overview, Users & carts, Orders, Products, Reviews and Analytics tabs. Product operations use the existing protected routes; do not delete imported records for a demonstration. Use the preserved `Academic Demo` products for checkout. Do not assign stock to imported records without identifying it as synthetic inventory.
 
    For the guarded recommendation refresh, open another PowerShell terminal and set the safety values again (they do not carry between terminals):
 
@@ -128,15 +122,15 @@ Open `http://127.0.0.1:5173/`; confirm the homepage renders and `http://127.0.0.
 
 | Time | Action | Expected outcome |
 |---|---|---|
-| 0:00–1:00 | Open the storefront; browse the synthetic catalog and category filter. | Product cards use original abstract category artwork; stock and prices come from the local API. |
-| 1:00–2:00 | Search for one demo product, open its details. | Search/filter and product detail show the API-backed record. |
-| 2:00–3:00 | Show “You might also like”. | Related product has a stored score and shared-tag/attribute explanation; if no fresh cache exists, the API labels the category fallback. |
-| 3:00–4:00 | Register/log in as a disposable customer. Add a stock-positive demo product, change quantity, remove/re-add it. | Cart operations are scoped to the signed-in user and reject quantities above stock. |
-| 4:00–5:30 | Check out once. | Confirmation shows the server-created order ID/total; MongoDB has a name/price snapshot, stock is decremented, cart is empty. Payment is mocked. |
-| 5:30–6:30 | Log in as the separately provisioned local admin; refresh `/admin`. | `$facet` dashboard renders order-status data. A new checkout is `pending`, so revenue/top-seller charts may be empty by design. |
-| 6:30–7:30 | Log in as the normal customer and request `/api/admin/dashboard` using the customer token (or try `/admin`). | API returns 403 for a customer; protected analytics are not disclosed. |
-| 7:30–9:00 | In Compass or `mongosh`, inspect `products.attributes`, `carts.items`, `orders.items`, reviews/recommendations, validators, TTL, text/category indexes, and unique user email index. | Explain Attribute Pattern, embedded cart/order snapshots, referenced reviews, TTL index, indexes/EXPLAIN, and seven validators. Use synthetic/demo database only. |
-| 9:00–10:00 | State honest limits and optional backend review check. | Review CRUD exists at the API, but there is no storefront review form. The Roadmap's final React-UI checklist asks for review operations; this remains a roadmap gap, not a formal SRS M6/FR requirement. Explain no seller tenancy, order-history management API, trend forecast, Change Streams, or vector search. |
+| 0:00-1:00 | Open storefront; point out total, browse imported records and category filters. | API reports 19,165 products (19,159 imported and six retained synthetic acceptance items); imported stock is zero. |
+| 1:00-2:00 | Search `Alisha`, open an imported product detail. | Search, detail, and recommendation fallback read real CSV-derived MongoDB records. |
+| 2:00-3:00 | Visit first, middle, and last catalogue pages; filter `Clothing`. | 12 per page, correct total/page count, 265 distinct categories; category/text indexes support queries. |
+| 3:00-4:00 | Search `Academic Demo`, register/log in as a disposable customer. | The clearly labeled synthetic checkout item has positive stock; imported items do not. |
+| 4:00-5:30 | Add/update/remove/re-add the synthetic item and check out. | User-scoped cart, transactional order snapshot/stock decrement; payment is mocked. |
+| 5:30-6:30 | Provision/log in as local admin; visit `/admin` Overview and Analytics. | Database-backed product/category/account/order/review/cart metrics and persisted analytics or honest empty state. |
+| 6:30-7:30 | Inspect Users & carts, Orders, Products, Reviews; test customer 403. | Safe user fields, current cart, order snapshots, protected product actions, read-only review list. |
+| 7:30-9:00 | In Compass or `mongosh`, inspect attributes, carts, orders, validators, TTL and indexes; show explain stats. | Explain Attribute Pattern, snapshots, validators and measured query plans using only the isolated database. |
+| 9:00-10:00 | State remaining scope and rights limits. | No review form, general order-history/status workflow, seller tenancy, trend prediction, Change Streams, or vector search; redistribution remains AMBER. |
 
 To populate revenue/top-product charts during an academic demo, a checkout order must have a sales status (`completed`, `shipped`, or `delivered`). The project has no order-status management UI/API. If the evaluator specifically asks to see the revenue branch, update **only the ObjectId of your own synthetic order** in the confirmed disposable database via Compass/mongosh, then refresh admin analytics; disclose that the status transition was a demo fixture action, not an application workflow. Otherwise, show the real `pending` count and explain the sales-status filter.
 

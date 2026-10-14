@@ -1,6 +1,6 @@
 # UrbanKart final project acceptance checklist
 
-Date: 2026-10-14. This checklist includes the final academic-submission regression rerun and preserves earlier Day 6 evidence and limitations.
+Date: 2026-10-14 final data-recovery/admin update. Earlier Day 6 evidence is retained and marked historical where it describes a different database.
 
 ## Six SRS modules
 
@@ -11,21 +11,22 @@ Date: 2026-10-14. This checklist includes the final academic-submission regressi
 | M3 — Order & Review Service | **PASS for order snapshot/transaction FRs and review CRUD; PARTIAL broader scope**: review lifecycle is verified, but the SRS narrative's general order history/list and update/delete operations are absent. |
 | M4 — Recommendation Engine | **PASS** for explainable content-based scoring, full-catalog recompute, bounded cache, fallback tests, and persisted local cache. Vector search is not implemented. |
 | M5 — Analytics & Aggregation Layer | **PASS for FR-8** admin `$facet` dashboard and role checks; SRS narrative trend-prediction endpoint is not implemented. |
-| M6 — Web Application (React + Express API) | **PARTIAL**: API/Vite startup and automated checks pass; browser visual verification could not complete because installed Chrome exited with GPU process error `-1073741790`. |
+| M6 — Web Application (React + Express API) | **PARTIAL**: API/Vite startup and automated checks pass; browser visual verification remains unverified; no browser automation package/tool was available, and the previous Chrome launch exited with GPU process error `-1073741790`. |
 
 ## Core implementation and evidence
 
 - [x] Six SRS modules traced in [`requirements-traceability.md`](requirements-traceability.md); current code and evidence checked.
 - [x] Isolated local database initialized with seven validators and 14 declared indexes.
-- [x] Local import: 19,159 product documents; source file remains ignored and untracked.
-- [x] Recommendation cache: 19,159 source documents and 95,509 related entries; validator bounds regression fixed and tested.
+- [x] Current acceptance database: 19,165 products (19,159 CSV-derived, plus six identified preserved synthetic demo fixtures); CSV remains ignored and untracked.
+- [x] Recommendation cache: full-catalog integration recomputed 19,168 products including three temporary fixtures; after exact fixture cleanup the local database has 19,165 recommendation documents for 19,165 products.
 - [x] API/Vite HTTP smoke: health/listing, registration/duplicate, login, cart, transactional checkout/order snapshot, admin dashboard and role denial.
 - [x] Review CRUD: focused tests and isolated MongoDB replica-set integration; public product/single-review reads, authenticated create, author-only patch/delete, validation, and aggregate recomputation.
 - [x] Fresh isolated live HTTP smoke: registration/duplicate handling, current-role admin/customer authorization, product CRUD/search/detail, explainable recommendation cache, cart add/update/remove, checkout/order snapshot/reconciliation, analytics values, review ownership and aggregate lifecycle. Synthetic records were removed by captured IDs.
-- [x] Customer/admin HTTP smoke records removed by captured IDs; the separate current demo DB now retains only six original synthetic products and six recommendation cache records, with zero users/orders/reviews.
+- [x] Current DB preserves one pre-existing customer, six explicitly named synthetic demo products, and their six recommendation caches; it has 19,159 imported products, zero orders/reviews. Temporary admin and CRUD fixtures were removed by exact IDs.
 - [x] Controlled restart persistence of the rebuilt task-owned database: same replica-set identity, 19,159 products, 19,159 caches, 95,509 related entries, seven validators. The first restart attempt failed and the population was rebuilt before this controlled check.
 - [x] Final native startup smoke on a separate loopback-only disposable database: seven validators and 14 indexes initialized; Express health and Vite root returned HTTP 200. Synthetic fixtures were isolated to that database and its `mongod` was cleanly stopped.
-- [x] Current server suite 88/88 (M3 follow-up); original Day 6 baseline was 85/85. Client tests 60/60; production client build succeeds.
+- [x] Latest suite rerun after recovery/admin changes: server 90/90, client 60/60 across 9 files; client build passed with 751 modules/761.34 kB minified JS with Vite bundle-size advisory.
+- [x] Fresh guarded Day 5 integration passed full-catalog recommendation recompute/cache, fallback and dashboard aggregation; review CRUD/ownership/rating aggregate integration passed on the same isolated replica set. Final read-only counts: 19,165 products/recommendations, one preserved user, zero carts/orders/reviews.
 - [x] Last-unit checkout race: 1 success, 19 conflicts; rollback and idempotency/reconciliation tests pass.
 - [x] Real category/price and text-index execution plans saved under `docs/evidence/day-6/`.
 - [x] Dataset declaration and third-party rights documented; storefront attribution present; overall redistribution clearance AMBER.
@@ -39,7 +40,7 @@ Date: 2026-10-14. This checklist includes the final academic-submission regressi
 | Checkout concurrency | **PASS** | Isolated race produced one 201 and nineteen 409; stock remained nonnegative. |
 | Transaction rollback | **PASS** | Injected order failure restored stock/cart and created no order. |
 | Recommendation fallback | **PASS** | Automated route/model tests cover stale/missing-cache same-category fallback. |
-| Admin authorization | **PASS** | Current-role route tests and recorded HTTP smoke: admin 200, customer 403. |
+| Admin authorization | **PASS** | Fresh local HTTP: admin overview/users/details/cart/orders/reviews/analytics all 200; customer denied 403. Product create/update/delete passed; deletion while an item was in a current cart returned 409. |
 | Clean-start reproducibility | **PASS WITH LIMITATIONS** | Controlled database restart passed; final native API/Vite health smoke returned 200. Docker remains unavailable. |
 | SRS performance target | **PARTIAL** | Local single-run database explains are under 150 ms, but are not a sustained/end-to-end SLO. |
 | Documentation | **PASS WITH LIMITATIONS** | README, traceability, API, demo, viva, security and release docs reviewed; manual walkthrough still required. |
@@ -59,7 +60,7 @@ Date: 2026-10-14. This checklist includes the final academic-submission regressi
 
 ## Academic submission decision
 
-**READY FOR ACADEMIC SUBMISSION WITH DISCLOSED SCOPE GAPS.** The latest rerun passed all 88 server tests, all 60 client tests, and the client production build, and the fresh isolated live HTTP journey passed. Broader SRS narrative gaps and environment limits remain explicit; this is an academic handoff, not production readiness.
+**READY FOR ACADEMIC SUBMISSION WITH DISCLOSED SCOPE GAPS.** The latest rerun passed all 90 server tests, all 60 client tests, and the production build. The guarded import inserted 19,159 source products, repeat import matched all, live catalogue/admin HTTP verification passed, and guarded Day 5/review integrations passed. Broader SRS narrative gaps and environment limits remain explicit; this is an academic handoff, not production readiness.
 
 | Area | Submission status | Evidence / qualification |
 |---|---|---|

@@ -1,0 +1,119 @@
+{
+  "auditDate": "2026-10-14",
+  "source": {
+    "dataset": "PromptCloudHQ/flipkart-products",
+    "csv": "server/seed/data/flipkart_com-ecommerce_sample.csv",
+    "sourceUrl": "https://www.kaggle.com/datasets/PromptCloudHQ/flipkart-products",
+    "declaredLicense": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "rawCsvCommitted": false
+  },
+  "target": {
+    "database": "urbankart_acceptance_20261014",
+    "topology": "MongoDB replica set",
+    "replicaSet": "ukAcceptance20261014",
+    "listener": "127.0.0.1:27230",
+    "applicationApi": "http://127.0.0.1:5002",
+    "credentialsOrUriSecretsRecorded": false
+  },
+  "dryRun": {
+    "rows": 20000,
+    "validCandidates": 19159,
+    "rejected": 841,
+    "invalidPrices": 78,
+    "duplicateProducts": 763,
+    "repeatedProductIds": 2,
+    "duplicateSourceIds": 0,
+    "malformedCsvRows": 0,
+    "modelValidationFailures": 0
+  },
+  "firstImport": {
+    "mode": "guarded loopback replica-set import",
+    "stockPolicy": 0,
+    "newlyImported": 19159,
+    "alreadyPresent": 0,
+    "failedWrites": 0,
+    "updated": 0,
+    "upsertPolicy": "deterministic namespaced source ID and $setOnInsert; existing records are not overwritten"
+  },
+  "repeatImport": {
+    "newlyImported": 0,
+    "alreadyPresent": 19159,
+    "failedWrites": 0
+  },
+  "databaseAfterImport": {
+    "products": 19165,
+    "importedZeroStockProducts": 19159,
+    "preservedAcademicDemoSyntheticProducts": 6,
+    "usersPreserved": 1,
+    "orders": 0,
+    "reviews": 0,
+    "recommendationCacheDocuments": 19165,
+    "validatedCollections": 7
+  },
+  "apiVerification": {
+    "firstPage": { "status": 200, "page": 1, "pageSize": 12, "total": 19165, "totalPages": 1598, "returned": 12 },
+    "middlePage": { "status": 200, "page": 800, "pageSize": 12, "returned": 12 },
+    "lastPage": { "status": 200, "page": 1598, "pageSize": 12, "returned": 1 },
+    "search": { "status": 200, "query": "Alisha", "matches": 6, "pageReturned": 6 },
+    "categoryFilter": { "status": 200, "category": "Clothing", "totalMatches": 5659, "pageSize": 12 },
+    "distinctCategories": 265,
+    "productDetail": 200,
+    "recommendationFallback": { "status": 200, "source": "fallback", "items": 5 }
+  },
+  "adminHttpVerification": {
+    "temporaryCustomerDeniedOverview": 403,
+    "temporaryAdminReadRoutes": {
+      "overview": 200,
+      "paginatedUsers": 200,
+      "safeUserDetail": 200,
+      "selectedUserCart": 200,
+      "paginatedOrders": 200,
+      "paginatedReviews": 200,
+      "day5Analytics": 200
+    },
+    "userResponsesIncludedPasswordHash": false,
+    "productCreate": 201,
+    "productUpdate": 200,
+    "deleteWhileReferencedByCart": 409,
+    "deleteAfterCartItemRemoved": 200,
+    "temporaryUserCartAndProductFixturesRemovedByExactIds": true
+  },
+  "regressionChecks": {
+    "serverTests": { "command": "npm.cmd test", "passed": 90, "failed": 0 },
+    "clientTests": { "command": "npm.cmd test", "filesPassed": 9, "passed": 60, "failed": 0 },
+    "clientBuild": { "command": "npm.cmd run build", "status": "passed", "modules": 751, "minifiedJavaScriptKb": 761.34, "warning": "Vite chunk exceeds 500 kB advisory" },
+    "gitDiffCheck": "passed"
+  },
+  "explainExecutionStats": {
+    "categoryPage": {
+      "query": "category=Clothing sorted by createdAt desc, _id asc; limit 12",
+      "winningIndex": "idx_products_category_created",
+      "winningStage": "IXSCAN",
+      "nReturned": 12,
+      "totalKeysExamined": 12,
+      "totalDocsExamined": 12,
+      "executionTimeMillis": 2
+    },
+    "textSearch": {
+      "query": "text search Alisha sorted by textScore; limit 12",
+      "winningIndex": "text_products_name_description_tags",
+      "winningStage": "TEXT_MATCH",
+      "nReturned": 6,
+      "totalKeysExamined": 6,
+      "totalDocsExamined": 6,
+      "executionTimeMillis": 0
+    },
+    "limitation": "Single local explain samples only; not a sustained latency benchmark or proof of the SRS under-150ms target."
+  },
+  "preservation": {
+    "usersCartsOrdersReviewsUnrelatedDataWiped": false,
+    "syntheticDemoProductsDeleted": false,
+    "retailerImagesDownloaded": false,
+    "recommendationBatchRecomputed": true,
+    "recommendationIntegration": { "status": "PASS", "productsProcessedIncludingThreeTemporaryFixtures": 19168, "persistedRecommendationDocumentsAfterFixtureCleanup": 19165, "cacheAndFallback": "verified" },
+    "reviewIntegration": { "status": "PASS", "aggregateLifecycle": "5/1 -> 3/1 -> 4/2 -> 5/1 -> 0/0", "authorOwnershipDenied": true },
+    "databaseCountsAfterIntegrationCleanup": { "products": 19165, "recommendations": 19165, "users": 1, "orders": 0, "reviews": 0, "carts": 0 },
+    "note": "The six prior synthetic catalog records and one pre-existing user were retained. Exact temporary fixtures were cleaned. CSV descriptions remain subject to the separately documented AMBER rights assessment."
+  }
+}

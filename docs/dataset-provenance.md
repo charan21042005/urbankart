@@ -1,6 +1,6 @@
 # Dataset provenance and licence assessment
 
-Assessment date: 2026-10-13.
+Assessment date: 2026-10-14 (licence scope recheck; import state updated).
 
 - **Dataset declaration:** `DECLARED_CC_BY_SA_4_0`
 - **Overall redistribution clearance:** **AMBER — declared licence, scope/third-party rights not fully verified**
@@ -39,7 +39,7 @@ The importer (`server/seed/importKaggleProducts.js`) performs these transformati
 - omits the source image URL, retail price, ratings, product URLs, crawl timestamp, and other fields from the UrbanKart Product record;
 - assigns stock `0` only when an operator explicitly chooses that synthetic default, because inventory is absent from the source.
 
-The storefront About & Data Sources notice credits PromptCloud and links both the Kaggle source and CC BY-SA 4.0. It summarizes these transformations and says that retailer descriptions, trademarks, and image links may have separate rights. The CSV remains ignored by Git; no raw CSV or retailer images are included in this repository.
+The storefront About & Data Sources notice credits PromptCloud and links both the Kaggle source and CC BY-SA 4.0. It summarizes these transformations and says that retailer descriptions, trademarks, and image links may have separate rights. The CSV remains ignored by Git; no raw CSV or retailer images are included in this repository. On 2026-10-14 a guarded import placed 19,159 normalized product records into the isolated `urbankart_acceptance_20261014` local database; see [`evidence/final-catalog-recovery-2026-10-14.json`](evidence/final-catalog-recovery-2026-10-14.json). This import does not change the separate rights uncertainty or clearance status.
 
 ## Licence obligations and scope
 
