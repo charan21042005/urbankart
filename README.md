@@ -197,11 +197,12 @@ Instead of calculating similarity dynamically, an offline process computes relat
 
 | Module | Purpose | Status |
 | :--- | :--- | :--- |
-| **M1 – Database Foundation** | Schemas, Validation Firewall, Seeding | ✅ Complete |
-| **M2 – API Architecture** | Express setup, Routing, Health checks | ✅ Complete |
-| **M3 - Authentication** | JWT, bcrypt, current-role authorization, customer account closure | Implemented |
-| **M4 - E-Commerce Engine** | Cart, transactional checkout, idempotency and reconciliation | Implemented and locally verified |
-| **M5 - Client Application** | API-connected React storefront, cart and checkout UI | Implemented; fresh browser acceptance remains blocked |
+| **M1 — Product & Catalog Service** | Flexible product documents, catalog CRUD/search/import and indexes | Implemented and tested; third-party catalogue redistribution remains AMBER |
+| **M2 — Cart & Checkout Service** | Embedded carts, stock validation, transactional checkout and idempotency | Implemented and tested on an isolated local replica set |
+| **M3 — Order & Review Service** | Order creation/snapshots and referenced review CRUD with rating aggregates | Checkout and review scope implemented; general order history/update/delete operations remain absent |
+| **M4 — Recommendation Engine** | Explainable content-based similarity, scheduled cache and fallback | Implemented and tested; predictive trend analytics and vector search are absent |
+| **M5 — Analytics & Aggregation Layer** | Admin-only `$facet` dashboard and role checks | Implemented and tested; broad SRS trend-prediction narrative is not implemented |
+| **M6 — Web Application** | React/Vite storefront and admin dashboard backed by Express | Implemented; live HTTP checks pass, but fresh visual browser verification remains unavailable |
 
 ## 🗺️ 15. Project Roadmap
 *   **Phase 1: Foundation & Database Modeling - Complete**
@@ -210,8 +211,8 @@ Instead of calculating similarity dynamically, an offline process computes relat
 *   **Phase 4: Cart, Checkout, Transactions and Idempotency - Local replica-set scenarios verified**
 *   **Phase 5: Transactions and Concurrency Control - Local replica-set scenarios verified**
 *   **Phase 6: React Storefront - Implemented; fresh browser acceptance pending**
-*   **Phase 7: Admin Dashboard and Analytics (later work)**
-*   **Phase 8: Intelligent Recommendations (Day 5)**
+*   **Phase 7: Admin Dashboard and Analytics - Implemented; isolated live route check passed**
+*   **Phase 8: Intelligent Recommendations - Implemented; scoring, cache, fallback and live endpoint checked**
 
 ## 📊 16. Current Implementation Status
 
@@ -232,7 +233,9 @@ Instead of calculating similarity dynamically, an offline process computes relat
 | Dataset declaration and redistribution | Kaggle declares CC BY-SA 4.0 (`DECLARED_CC_BY_SA_4_0`); overall clearance remains AMBER because uploader authority and retailer descriptions, marks, and image rights are not fully verified. Keep the raw CSV out of Git. See [dataset provenance](docs/dataset-provenance.md). |
 | Fresh browser end-to-end QA | Pending; Chrome, Edge, and Brave could not render in this environment; no fresh screenshots |
 | Atomic Inventory Updates | Transaction-backed; local replica-set scenarios verified |
-| Reviews API/UI, recommendation generation, analytics | 📅 Later roadmap work; not part of the verified Days 1–4 storefront |
+| Review service | Backend CRUD, ownership checks, transactions, and product rating aggregates are implemented/tested; no storefront review form is present. The formal SRS M6 list does not require it, but the Roadmap React-UI CRUD checklist does; see the roadmap gap in traceability. |
+| Recommendations and admin analytics | Implemented; see Day 5 evidence. Predictive trend analytics are not implemented. |
+| Broader SRS narrative scope | Seller-specific multi-vendor accounts/dashboards and general order history/management APIs are not implemented; the formal FR list does not define seller-isolation or full order-management endpoint contracts. |
 
 ## 📁 17. Repository Structure
 
@@ -324,6 +327,8 @@ Beyond the current roadmap, potential future architectural extensions include:
     ```
     The API defaults to port 5000. In another PowerShell terminal run `cd ..\client; npm.cmd install; npm.cmd run dev -- --host 127.0.0.1`. Vite proxies `/api` to loopback Express. Open `http://127.0.0.1:5173` and verify `http://127.0.0.1:5000/api/health` before the walkthrough. `npm.cmd` works around PowerShell execution policies that may block `npm.ps1`.
 
+For an isolated local MongoDB replica-set setup, safe demo-account/product preparation, and the 7–10 minute customer/admin walkthrough, see the [final evaluation runbook](docs/final-e2e-demonstration-runbook.md). The SRS Docker Compose NFR is not fulfilled because no Docker configuration exists; the runbook documents native startup instead.
+
 ## 🧪 24. Stage G — Isolated local integration verification
 
 Stage G verified the application against a temporary local MongoDB 8.3 replica set. The task-created `mongod` process listened only on `127.0.0.1:27018`, used a separate disposable data directory and replica-set name `ukStageG`, and selected the isolated database `urbankart_stageg_local`. MongoDB `hello` confirmed a writable replica-set primary, and a transaction probe committed and removed its synthetic record. The temporary server and data directory were stopped and removed after verification.
@@ -396,11 +401,11 @@ This project is licensed under the MIT License. See the `LICENSE` file for full 
 
 The PromptCloudHQ [Flipkart Products dataset on Kaggle](https://www.kaggle.com/datasets/PromptCloudHQ/flipkart-products) declares [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) (`DECLARED_CC_BY_SA_4_0`). The overall redistribution assessment remains **AMBER — declared licence, scope/third-party rights not fully verified**. The storefront footer's “About & data sources” disclosure credits the dataset, links the source and licence, and summarizes transformations. The CSV's filename, metadata, and header were inspected locally; the importer omits its image URLs and no retailer image was downloaded. Product description, trademark, and image rights remain separate open questions. ShareAlike, substantial database extraction, and uploader-authority limits are documented in [`docs/dataset-provenance.md`](docs/dataset-provenance.md). The raw CSV remains out of Git. This project note is not legal advice or a guarantee of non-infringement.
 
-## Current Days 1–4 Verification (2026-10-13)
+## Historical Days 1–4 Verification (2026-10-13)
 
 The detailed [Days 1–4 completion report](_day-notes/day-01-04/DAYS_01_04_COMPLETION.md) is the current evidence record and explicitly separates offline tests, disposable-local-MongoDB tests, live local HTTP checks, and browser QA. Earlier work verified idempotent checkout/reconciliation, rollback, and the 20-request stock race on a task-owned MongoDB 8.3.7 replica set. This follow-up created a separate loopback-only local development database under `%LOCALAPPDATA%` with 19,159 products and seven validators. Atlas and the existing `test` database were not contacted; the raw CSV remains Git-ignored and the local database is outside Git/OneDrive.
 
-The API and Vite proxy completed a direct HTTP storefront/cart/checkout sequence, including a persisted order and reconciliation. A prior isolated local HTTP check also verified customer admin CRUD and checkout through Vite/Express against synthetic local data, then the catalog was imported into a separate persistent loopback-only database. This final recheck initialized a distinct empty test database on the same verified loopback replica set and reran MongoDB validation, idempotency, rollback, and concurrency tests; the detailed report records its exact counts. Current offline tests pass (server 65/65, client 44/44), the client production build passes, dependency listings pass, syntax checks pass across 44 JavaScript files, and the importer dry run parsed 20,000 rows without writes. A fresh normal visible Chrome launch exited before rendering with GPU process exit `-1073741790` and `GPU process isn't usable`; no screenshot was captured. Previous Stage G/H screenshots are historical, not evidence for this diff. The roadmap and Day 1–3 guides were readable during the latest requirements recheck; the SRS and Day 4 guide remained locked and could not be independently reread. Days 1–4 remain **partially complete** pending browser QA, complete review of those two locked source documents, and dataset-license clarification.
+This section records the 2026-10-13 result only: at that time the SRS and Day 4 guide could not be independently reread, the then-current server/client suites were 65/65 and 44/44, and Chrome exited with GPU process error `-1073741790` before a screenshot. These are historical counts/findings, not the final audit. On 2026-10-14, the named SRS, roadmap, and all six Day DeepDive DOCX files were found and inspected. See the [final traceability matrix](docs/requirements-traceability.md), [acceptance checklist](docs/final-project-acceptance-checklist.md), and [live evaluation runbook](docs/final-e2e-demonstration-runbook.md) for current results and remaining gaps. Current browser visual verification remains unclaimed; dataset redistribution remains AMBER.
 
 
 ## Day 6 verification and local evaluation

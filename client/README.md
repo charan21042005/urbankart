@@ -8,8 +8,8 @@ Requirements: Node.js 20.19+ (or 22.12+) and npm. Start Express against the data
 
 ```powershell
 cd client
-npm install
-npm run dev -- --host 127.0.0.1
+    npm.cmd install
+    npm.cmd run dev -- --host 127.0.0.1
 ```
 
 Vite normally serves `http://127.0.0.1:5173`. Its `/api` proxy defaults to `http://127.0.0.1:5000`. For a different loopback API port, set the process variable `URBANKART_DEV_API_PROXY=http://127.0.0.1:<port>` before starting Vite. The Vite config rejects non-loopback, non-HTTP, or credential-bearing proxy origins. `VITE_API_BASE_URL` may select a public API base URL, but all `VITE_` values are visible in the browser; never put secrets there.
@@ -32,10 +32,10 @@ The app uses semantic main/navigation landmarks, a visible-on-focus skip link, a
 ## Client checks
 
 ```powershell
-npm test
-npm run build
-npm ls --depth=0
-npm ls --package-lock-only --depth=0
+npm.cmd test
+npm.cmd run build
+npm.cmd ls --depth=0
+npm.cmd ls --package-lock-only --depth=0
 ```
 
-Vitest/Testing Library tests use mocked API modules for client behavior, including catalog state, auth/cart state, and uncertain checkout reconciliation. They do not establish live browser or MongoDB behavior. The latest offline run passed 44 tests and the production build; the current browser limitation is documented in the [Days 1–4 completion report](../_day-notes/day-01-04/DAYS_01_04_COMPLETION.md).
+Vitest/Testing Library tests use mocked API modules for client behavior, including catalog state, auth/cart state, and uncertain checkout reconciliation. They do not establish visual browser or MongoDB behavior. The final 2026-10-14 rerun passed 60 tests across 9 files and the production build. The browser limitation and exact live HTTP coverage are recorded in the [final evaluation runbook](../docs/final-e2e-demonstration-runbook.md).

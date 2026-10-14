@@ -52,7 +52,7 @@ Reviews use the SRS `productId`, `userId`, `rating`, and optional `text` fields 
 
 ## Safe local setup
 
-Install dependencies with `npm install`. Configure root `.env` with placeholders from `../.env.example` only after choosing the database. For local schema work, start a fresh disposable MongoDB replica set bound to `127.0.0.1`; independently verify its `hello` identity. In the same PowerShell process as the commands, configure process-scoped values (do not paste them into source control):
+On Windows PowerShell, install dependencies with `npm.cmd install`. Configure root `.env` with placeholders from `../.env.example` only after choosing the database. For local schema work, start a fresh disposable MongoDB replica set bound to `127.0.0.1`; independently verify its `hello` identity. In the same PowerShell process as the commands, configure process-scoped values (do not paste them into source control):
 
 ```powershell
 $env:MONGODB_URI='mongodb://127.0.0.1:27017/urbankart_local?replicaSet=ukLocal'
@@ -60,8 +60,8 @@ $env:URBANKART_EXPECTED_DB_NAME='urbankart_local'
 $env:URBANKART_DB_ENV='isolated-development'
 $env:URBANKART_TXN_TOPOLOGY_CONFIRMED='replicaSet'
 $env:URBANKART_TXN_REPLICA_SET_NAME='ukLocal'
-npm run db:init:local -- --confirm-local-db urbankart_local
-npm run test:db:validation -- --confirm-local-db urbankart_local
+npm.cmd run db:init:local -- --confirm-local-db urbankart_local
+npm.cmd run test:db:validation -- --confirm-local-db urbankart_local
 ```
 
 The process values override dotenv only for that shell/process. They are not evidence by themselves: the scripts also parse the URI and verify the connected local replica-set primary and every advertised host. Never run these write commands against Atlas or a shared database. The Day 1 sample seed is also local-gated and uses deterministic `$setOnInsert` upserts without clearing existing products:
@@ -77,7 +77,7 @@ The CSV importer applies the same complete local-member gate before its bounded 
 The recommendation score is weighted Jaccard over normalized, unique product tags and `{ key, value }` attributes, plus a `0.2` same-category bonus, capped at `1`. Stored matches include their common tags/attributes and score components. The job ranks candidates deterministically, stores at most five per product, and runs daily at 02:00 in `Asia/Kolkata` by default. `RECOMMENDATION_CRON_SCHEDULE` and `RECOMMENDATION_TIMEZONE` can override that schedule. The job does not recompute the full catalogue during server startup. To run a deliberate local refresh, first point process-scoped safety settings at a separately confirmed disposable loopback replica set, then run:
 
 ```powershell
-npm run recommendations:recompute -- --confirm-local-db <database-name>
+npm.cmd run recommendations:recompute -- --confirm-local-db <database-name>
 ```
 
 Admin analytics include `completed`, `shipped`, and `delivered` items in revenue and top-unit counts. Revenue uses historical `priceAtPurchase * qty`; because orders do not snapshot product category, category uses the current Product record. A deleted or missing Product is reported as `Unattributed`. Status counts include all orders. No currency is inferred. The API loads the caller's current database role before aggregation; customers receive `403`.
@@ -89,9 +89,9 @@ Day 5 implementation details, source-document mapping, isolated database evidenc
 The local ignored file `seed/data/flipkart_com-ecommerce_sample.csv` is the PromptCloudHQ Flipkart Products dataset. The Kaggle dataset page declares [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); record its source and transformation attribution and keep the raw CSV out of Git. The declaration does not establish the uploader's authority over retailer descriptions, trademarks, or linked image assets. Overall redistribution clearance remains AMBER; see [`docs/dataset-provenance.md`](../docs/dataset-provenance.md). The importer requires `uniq_id`, `product_name`, `product_category_tree`, and `discounted_price`; it maps specifications/brand to `{ key, value }`, uses deterministic IDs, validates rows, and writes bounded batches. The source has no stock or explicit currency field. A write therefore requires an explicit inventory policy such as `--stock-default 0` and does not add a currency field.
 
 ```powershell
-npm run import:products -- --dry-run
+npm.cmd run import:products -- --dry-run
 # Only for a separately confirmed disposable local database:
-npm run import:products -- --import --stock-default 0 --confirm-local-db urbankart_local
+npm.cmd run import:products -- --import --stock-default 0 --confirm-local-db urbankart_local
 ```
 
 The latest local dry run parsed 20,000 rows: 19,159 valid unique normalized products, 841 rejected (78 invalid prices and 763 duplicate products among the counted rejection reasons), 2 repeated product IDs, no repeated `uniq_id`, and 11,249 specification pairs without a key/value mapping. The isolated import count was 19,159. It was performed only in a task-owned disposable local database that has since been removed; it is not a current persistent catalog count. Price values remain currency-unspecified.
@@ -148,9 +148,9 @@ Checkout reads the authenticated server-side cart and current Product records. I
 ## Checks
 
 ```powershell
-npm test
-npm ls --depth=0
-npm ls --package-lock-only --depth=0
+npm.cmd test
+npm.cmd ls --depth=0
+npm.cmd ls --package-lock-only --depth=0
 ```
 
-`npm test` is the offline Node test suite, including mocked API/model behavior and database-safety preflight tests. The database validator command and `test:checkout:*` scripts are real database tests and require the explicit local replica-set gate. The latest completion run verified validator rejection, same-key replay/conflict and lost-response reconciliation, rollback, and a 20-request last-unit race on a disposable MongoDB 8.3.7 replica set; see [`_day-notes/day-01-04/DAYS_01_04_COMPLETION.md`](../_day-notes/day-01-04/DAYS_01_04_COMPLETION.md) for the actual counts and limitations. No Atlas or production database was contacted.
+`npm.cmd test` is the offline Node test suite, including mocked API/model behavior and database-safety preflight tests. The database validator command and `test:checkout:*` scripts are real database tests and require the explicit local replica-set gate. The latest academic audit reran 88 server tests and passed; historical isolated runs verified validator rejection, same-key replay/conflict and lost-response reconciliation, rollback, and a 20-request last-unit race on a disposable MongoDB 8.3.7 replica set. See the final evaluation runbook and requirements traceability for current evidence and limits. No Atlas or production database was contacted during the latest local audit.

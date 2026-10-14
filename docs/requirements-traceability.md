@@ -26,9 +26,7 @@ The source requirements below are therefore mapped from the supplied task brief,
 
 ## Current-run quality evidence
 
-- `server`: `npm test` — 65 passed, 0 failed.
-- `client`: `npm test` — 48 passed, 0 failed (includes product-card action/illustration and data-source disclosure tests).
-- `client`: `npm run build` — passed, 173 modules transformed.
+- Historical Days 1–4 commands/results: `server`: `npm.cmd test` — 65 passed; `client`: `npm.cmd test` — 48 passed; `client`: `npm.cmd run build` — passed with 173 modules transformed. See the 2026-10-14 final audit section below for the latest results.
 - Development endpoints/ports: port 5173 was occupied when Vite started, so the client opened on 5174. A visible Brave window was opened at `http://127.0.0.1:5174/`; no screenshot or visual inspection was captured. The API and MongoDB loopback ports were not active; no live API or database check was run.
 - Dataset file metadata and its CSV header were inspected locally; data rows were not read or imported. No database writes were performed.
 - No browser screenshots were captured. The previous report's Chrome/Edge/Brave failures remain historical evidence, not a fresh failure reproduction. Opening a visible window alone is not counted as a browser acceptance pass.
@@ -61,10 +59,33 @@ The Day 6 mission supplied the current SRS, roadmap, and Day 6 DeepDive paths; t
 |---|---|---|---|
 | M1 — Product & Catalog Service | Product model, flexible attributes, listing/search/category/admin product routes, guarded CSV importer, category/price and text indexes | 19,159-product import, Vite/API catalog smoke, actual explain plans, 85 server tests | **PASS for implementation; rights remain AMBER for redistribution** |
 | M2 — Cart & Checkout Service | User-scoped embedded carts, stock validation, transaction checkout, idempotency/reconciliation | HTTP smoke, 20-way race (1/19), rollback and idempotency scripts | **PASS** |
-| M3 — Order & Review Service | Order snapshots/status; referenced Review collection with product/user IDs, integer rating, and optional SRS `text`; review CRUD routes and transactional product-rating recomputation | Mocked route lifecycle/authorization/validation tests plus safety-gated isolated MongoDB replica-set lifecycle test; checkout snapshot evidence remains | **PASS** — public reads, authenticated create, author-only update/delete; no SRS purchase-verification or duplicate restriction is specified |
+| M3 — Order & Review Service | Transactional order creation with price/name snapshots; referenced Review collection and CRUD with rating aggregates | Live checkout snapshot/stock/cart verification in isolated acceptance DB; review public reads, author-only mutations and aggregate lifecycle in live HTTP smoke; 88 server tests | **PASS for FR-5/FR-6 and review CRUD; PARTIAL for broader SRS narrative** — no general order-history/list, update, or delete API is present (SRS §2.3 describes order history and §2.1 mentions full CRUD across orders). |
 | M4 — Recommendation Engine | Scheduled content-based scorer, full-catalog batch recompute, bounded explained cache, read fallback | 19,159 cache docs, 95,509 related entries, scorer bounds regression, recommendation tests | **PASS for implemented content-based scope**; Atlas Vector Search not implemented |
-| M5 — Analytics & Aggregation Layer | Admin-only `$facet` dashboard for revenue/category, top products, and order statuses | Admin login/dashboard 200; customer 403; server route/aggregation tests | **PASS** |
+| M5 — Analytics & Aggregation Layer | Admin-only `$facet` dashboard for revenue/category, top products, and order statuses | Live isolated dashboard returned admin 200/customer 403 and reflected a synthetic completed order; route/aggregation tests | **PASS for FR-8; PARTIAL for SRS §2.1 narrative** — the separately described trend-prediction endpoint is not implemented. |
 | M6 — Web Application (React + Express API) | React/Vite storefront/admin UI and Express API with Vite `/api` proxy | 60 client tests, successful build, live API/Vite proxy/customer/admin HTTP smoke | **PASS WITH VISUAL LIMITATION** — Day 6 browser screenshot/visual inspection unavailable |
+
+## Formal SRS functional and non-functional requirements
+
+The table below maps the SRS §5 FR-1–FR-10 and §5.1 NFRs separately from the broader purpose statements recorded later in this document. Fresh live checks refer only to the new loopback-only acceptance database; the 19,159-product benchmark/import and race run are historical, separately identified evidence.
+
+| SRS requirement | Implementation / test evidence | Status | Limit / next action |
+|---|---|---|---|
+| FR-1 Product CRUD with category-specific attributes | `server/routes/productRoutes.js`, Product Attribute Pattern; API CRUD/auth tests; fresh live admin product creates and customer-write 403 | **PASS** | General seller ownership is not in FR-1; broader multi-vendor scope difference is below. |
+| FR-2 Full-text search across title/description | Product text index/search route; automated catalog tests; fresh live search + category + sort returned the two synthetic matches | **PASS** | Historical 19,159-product query plan supports index selection; see performance NFR. |
+| FR-3 Persistent per-user embedded cart with add/remove | Cart model/routes; automated cart tests; fresh live read/add/update/remove/re-add, followed by empty cart after checkout | **PASS** | User-specific live fixtures were cleaned after verification. |
+| FR-4 Prevent oversell under concurrent checkout | Conditional stock capacity guard in a MongoDB transaction; historical isolated 20-request race returned one success and 19 conflicts; regression tests pass | **PASS** | Race is previous isolated evidence; this final run did not consume inventory in the main/local service DB. |
+| FR-5 Atomic order creation and stock decrement | Checkout transaction; fresh isolated live checkout returned 201, decremented stock, created the order, and cleared cart | **PASS** | Payment remains mock-only. |
+| FR-6 Preserve product name and price snapshots | Order item schema; fresh live order snapshot name/price/total assertions; historical checkout tests | **PASS** | Order history/management is not implemented; broader scope note below. |
+| FR-7 Show top five similar products on product detail | Scorer caps cache at five, explanations/fallback, React product detail; fresh live two-product cache read with shared-tag explanation; automated tests | **PASS** | Explainable content similarity, not neural/vector prediction. |
+| FR-8 Admin-only revenue/category, top-selling, status dashboard | `$facet` aggregation, current-role middleware, React admin dashboard; fresh live admin 200/customer 403; synthetic completed-order values verified | **PASS** | Demo changed only the synthetic order status in the disposable DB to exercise revenue; app has no order-status management UI/API. |
+| FR-9 JWT authentication; customer/admin roles | Auth routes/middleware; auth/current-role tests; fresh live registration ignored requested admin role, customer login worked, trusted local admin login worked | **PASS** | Admin role is intentionally provisioned out of band. |
+| FR-10 Reject invalid product/order writes using validation | Mongoose models and seven initialized MongoDB validators; validator/auth/checkout tests; isolated validator evidence | **PASS** | Fresh acceptance DB was initialized and validators inspected; the full negative-validator integration was not rerun in this final HTTP journey. |
+| NFR Performance: <150 ms with 10,000+ products, verified by explain | Raw 19,159-product category/text explain JSON: category 19,159 docs/0 keys/13 ms before and 5,659 docs+keys/21 ms after; text 6 docs+keys/23 ms | **PARTIAL** | Not a sustained/end-to-end SLO; category single-run time regressed despite fewer documents. No speedup claim. |
+| NFR Correctness: no negative stock under concurrency | Prior isolated 20-way race (1 success/19 conflicts), checkout tests; fresh sequential live transaction also checked stock decrement | **PASS** | Concurrency outcome is historical, not rerun here. |
+| NFR Data integrity: all product/order writes pass `$jsonSchema` | Seven validators live in isolated DB; schema validation tests and prior negative-validation run | **PASS** | Six SRS collections plus the additional checkout-operation collection. |
+| NFR Explainability: every recommendation links to shared features | Scorer/cache tests; fresh live cached recommendation included a shared-tag explanation | **PASS** | — |
+| NFR Reproducibility: API + seed start with one `docker-compose` command | Repository has no Dockerfile or Compose configuration; Docker Engine unavailable. Native MongoDB/API/Vite process startup and HTTP proxy were live-verified | **GAP** for the literal Compose requirement; **PASS WITH LIMITATION** for native local startup | Do not claim one-command Docker startup. The native academic runbook is provided. |
+| NFR Honesty of scope for mocked features | Checkout/docs explicitly say no payment gateway; dataset and performance caveats documented | **PASS WITH DISCLOSED LIMITS** | No payment, shipping, address, tax, or currency workflow. |
 
 ## Day 6 verification record
 
@@ -74,6 +95,26 @@ The Day 6 mission supplied the current SRS, roadmap, and Day 6 DeepDive paths; t
 - Real index explains show category `IXSCAN` after adding the declared index and text `TEXT_MATCH` via the weighted text index. Category examined docs fell from 19,159 to 5,659, but observed time was 13 ms before and 21 ms after; no speedup claim is made. The <150 ms goal remains partial based on three single-run database timings, not a sustained/end-to-end SLO. Unique `users.email` metadata (`email_1`, unique) and duplicate-registration 409 were confirmed. See [`day-6-indexing-evidence.md`](day-6-indexing-evidence.md).
 - Full dataset/source declaration remains `DECLARED_CC_BY_SA_4_0`; overall redistribution clearance remains **AMBER — declared licence, scope/third-party rights not fully verified**. The live Kaggle page's complete notices/uploader authority and individual third-party image/description rights were not established; no legal guarantee is implied.
 - Docker Engine unavailable/no container definitions; one-command container startup **BLOCKED**. GUI screenshots not captured. Change Streams, Atlas Vector Search, and GridFS remain unimplemented stretch goals.
+- Fresh local end-to-end API run on 2026-10-14 initialized a new `urbankart_acceptance_20261014` database on `ukAcceptance20261014`, ran 31 customer/admin assertions through `127.0.0.1:5002`, and confirmed fixtures returned to zero. Vite `127.0.0.1:5174`, its API proxy, and Express health each returned 200. A matching runbook is [`final-e2e-demonstration-runbook.md`](final-e2e-demonstration-runbook.md). No browser GUI/screenshot check was performed in this run.
+
+## Additional SRS scope statements and roadmap aspirations
+
+| Source statement | Code/evidence comparison | Status / interpretation |
+|---|---|---|
+| SRS §2.3: customer flow includes order history; §2.1 claims full CRUD across products, carts, orders, and reviews | Checkout returns the newly created order and idempotency reconciliation can retrieve that order. There is no general customer order-history/list or order update/delete route. | **PARTIAL / GAP** for the broader narrative; FR-5 and FR-6 order creation/snapshot requirements pass. |
+| SRS §2.1 describes a trend-prediction analytics endpoint as a course deliverable | Repository analytics implement descriptive revenue/category, top-products, and status aggregation. No trend/forecast endpoint or prediction code was found. FR-8's enumerated dashboard itself passes. | **GAP** against the SRS narrative deliverable; disclose as not implemented. |
+| SRS title/objective describes multi-vendor sellers and seller-facing dashboards | There is no seller role, seller ownership field/filter, or seller dashboard. Current supported roles are customer and admin; product mutations are admin-only. No FR specifies seller isolation or a seller CRUD API. | **PARTIAL scope difference**, not a separately specified FR; do not describe the implemented app as multi-tenant. |
+| SRS M3 references reviews; SRS M6 feature list names product grid/detail, recommendations, cart, checkout, and admin dashboard | Review REST routes are present and tested; no review form is present in the React storefront. Neither FR-1–FR-10 nor the SRS M6 feature list requires a review UI. | **PASS for formal SRS API scope; review UI NOT APPLICABLE to formal SRS. ROADMAP GAP** below. |
+| SRS §13.1 stretch goals | A 30-day cart TTL index and multi-document checkout transactions exist. Change Streams and Atlas Vector Search do not. | **Two stretch capabilities implemented** (TTL, transactions); remaining stretch items are optional/not implemented. |
+
+The formal FR/NFR statuses above remain separate from these broader descriptive statements and the roadmap's day-by-day targets. The SRS NFR requiring one-command Docker Compose startup remains **GAP/NOT VERIFIED**: the repository has no Dockerfile/Compose file and Docker Engine is unavailable; native isolated startup has been exercised instead.
+
+## Roadmap-only acceptance items
+
+| Roadmap source/statement | Implementation/evidence | Status |
+|---|---|---|
+| 6-Day Roadmap final verification checklist: every route (`products`, `users`, `cart`, `checkout`, `reviews`) works end-to-end from the actual React UI, not just Postman | Live API journeys passed; React has no review form or review mutation flow. The SRS does not require review UI, and no such form was added during this audit. | **GAP against roadmap checklist; not a formal SRS FR/M6 gap.** If the evaluator treats this roadmap checkbox as mandatory, review CRUD is backend-only and cannot be demonstrated through React. |
+| Roadmap Day 4 manual browser purchase/screenshot and Day 6 evidence screenshots | HTTP checkout/UI root/API proxy passed; no fresh browser rendering or screenshot was captured in this audit. | **PARTIAL / NOT VERIFIED visually**; evaluator can run the manual browser walkthrough using the runbook. |
 
 For the final academic-submission disposition, the implementation and regression checks are **READY FOR ACADEMIC SUBMISSION** with the above limitations disclosed. This does not upgrade the partial latency evidence, unavailable GUI/Docker checks, or AMBER redistribution assessment to PASS; see the final acceptance checklist.
 

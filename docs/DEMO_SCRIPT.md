@@ -1,5 +1,7 @@
 # UrbanKart live demo script (about 4 minutes)
 
+For the expanded 7–10 minute evaluation flow and exact PowerShell setup, use [`final-e2e-demonstration-runbook.md`](final-e2e-demonstration-runbook.md).
+
 ## Before the timer
 
 Start the local MongoDB replica set, then start Express in `server/` and Vite in `client/` using the safe local commands in the root README. Use a disposable local database and test accounts only. Have a local admin account available; do not show `.env`, passwords, tokens, or raw database credentials. If MongoDB or authentication is unavailable, show the recorded evidence and explain the blocker instead of improvising against a real account.

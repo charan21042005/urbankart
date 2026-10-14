@@ -15,7 +15,7 @@ Audit date: 2026-10-14. This is the read-only starting snapshot before Day 6 ver
 
 The actual SRS Blueprint, 6-Day Roadmap, and Day 1–6 DeepDive documents are present in the user's project Planning/Day_Wise folders; their text was inspected without changing the source documents. The repository contains Day 1–3 implementation/completion notes, Days 1–4 acceptance evidence, Day 5 acceptance evidence, and requirements traceability. The root `README.md`, `server/README.md`, and `client/README.md` are the setup references. No prior Day 6 reports, demo script, or final checklist existed.
 
-The repository has separate `server/` (Express, Mongoose, Node tests, MongoDB safety/import scripts) and `client/` (React/Vite, Vitest) packages; there is no root `package.json`. The backend mounts auth, user, admin analytics, cart/checkout, and product routes. The client proxies `/api` to a loopback backend in Vite development. Persistent startup uses `server/server.js` and `client/npm run dev` as separate processes.
+The repository has separate `server/` (Express, Mongoose, Node tests, MongoDB safety/import scripts) and `client/` (React/Vite, Vitest) packages; there is no root `package.json`. The backend mounts auth, user, admin analytics, cart/checkout, and product routes. The client proxies `/api` to a loopback backend in Vite development. On Windows, persistent startup uses `node server.js` from `server/` and `npm.cmd run dev -- --host 127.0.0.1` from `client/` as separate processes.
 
 ## Environment and infrastructure
 
