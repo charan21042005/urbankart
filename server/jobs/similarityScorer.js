@@ -47,43 +47,57 @@ function compareStrings(left, right) {
  * Tags and key/value attributes are separate feature types, so a tag named
  * "size=large" cannot accidentally collide with the corresponding attribute.
  */
-function similarityScore(productA, productB) {
-  const idA = stableId(productA);
-  const idB = stableId(productB);
-  const sameProduct = Boolean(idA && idB && idA === idB);
-  const featuresA = extractFeatures(productA);
-  const featuresB = extractFeatures(productB);
-  const sharedKeys = [...featuresA.keys()].filter((key) => featuresB.has(key)).sort(compareStrings);
-  const unionSize = new Set([...featuresA.keys(), ...featuresB.keys()]).size;
-  const jaccard = unionSize ? sharedKeys.length / unionSize : 0;
-  const categoryA = normalizeText(productA?.category);
-  const categoryB = normalizeText(productB?.category);
-  const categoryMatch = Boolean(categoryA && categoryB && categoryA === categoryB);
+function similarityScoreFromCounts(featureCountA, featureCountB, sharedFeatureCount, categoryMatch) {
+  const unionFeatureCount = featureCountA + featureCountB - sharedFeatureCount;
+  const jaccard = unionFeatureCount ? sharedFeatureCount / unionFeatureCount : 0;
   const categoryBonus = categoryMatch ? CATEGORY_BONUS : 0;
 
   // Example: [wireless, mechanical] versus [wireless, gaming] has one shared
   // feature in a union of three (1/3). Matching categories add 0.2, so the
   // final score is min(1, 0.333333 + 0.2) = 0.533333.
-  const score = sameProduct ? 0 : Number(Math.min(1, jaccard + categoryBonus).toFixed(6));
+  const score = Number(Math.min(1, jaccard + categoryBonus).toFixed(6));
+  return { score, categoryBonus, unionFeatureCount };
+}
+
+function similarityScoreFromFeatures(productA, productB, featuresA, featuresB, categoryA, categoryB) {
+  const idA = stableId(productA);
+  const idB = stableId(productB);
+  const sameProduct = Boolean(idA && idB && idA === idB);
+  const leftFeatures = featuresA || extractFeatures(productA);
+  const rightFeatures = featuresB || extractFeatures(productB);
+  const sharedKeys = [...leftFeatures.keys()].filter((key) => rightFeatures.has(key)).sort(compareStrings);
+  const leftCategory = categoryA === undefined ? normalizeText(productA?.category) : categoryA;
+  const rightCategory = categoryB === undefined ? normalizeText(productB?.category) : categoryB;
+  const categoryMatch = Boolean(leftCategory && rightCategory && leftCategory === rightCategory);
+  const computed = similarityScoreFromCounts(leftFeatures.size, rightFeatures.size, sharedKeys.length, categoryMatch);
+  const score = sameProduct ? 0 : computed.score;
   const sharedTags = sharedKeys
-    .map((key) => featuresA.get(key))
+    .map((key) => leftFeatures.get(key))
     .filter((feature) => feature.type === 'tag')
-    .map((feature) => feature.value);
+    .map((feature) => feature.value.slice(0, 120))
+    .slice(0, 50);
   const sharedAttributes = sharedKeys
-    .map((key) => featuresA.get(key))
+    .map((key) => leftFeatures.get(key))
     .filter((feature) => feature.type === 'attribute')
-    .map(({ key, value }) => ({ key, value }));
+    .map(({ key, value }) => ({ key: key.slice(0, 120), value: value.slice(0, 120) }))
+    .slice(0, 50);
 
   return {
     score,
     sharedTags,
     sharedAttributes,
     categoryMatch,
-    categoryBonus,
+    categoryBonus: computed.categoryBonus,
+    // Cache validators bound each explanation list to 50 entries. The score
+    // and sharedFeatureCount still use every matched feature.
     sharedFeatureCount: sameProduct ? 0 : sharedKeys.length,
-    unionFeatureCount: unionSize,
+    unionFeatureCount: computed.unionFeatureCount,
     sameProduct
   };
 }
 
-module.exports = { similarityScore, extractFeatures, normalizeText, stableId, CATEGORY_BONUS };
+function similarityScore(productA, productB) {
+  return similarityScoreFromFeatures(productA, productB);
+}
+
+module.exports = { similarityScore, similarityScoreFromFeatures, similarityScoreFromCounts, extractFeatures, normalizeText, stableId, CATEGORY_BONUS };

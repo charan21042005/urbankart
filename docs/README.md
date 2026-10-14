@@ -21,3 +21,16 @@ This directory serves as the central hub for all non-code documentation, plannin
 ### 🔍 Guidelines for Contributing
 - Keep documentation up-to-date with codebase changes.
 - Ensure architectural decisions include a "Why" section explaining the NoSQL tradeoffs.
+
+### Day 6 acceptance and demo
+
+- [Baseline audit and gate status](day-6-baseline-audit.md)
+- [Clean-start and HTTP smoke verification](day-6-clean-start-verification.md)
+- [Regression report](day-6-regression-report.md)
+- [Checkout concurrency, rollback, and idempotency](day-6-concurrency-reverification.md)
+- [MongoDB execution-plan evidence](day-6-indexing-evidence.md)
+- [Final acceptance checklist](final-project-acceptance-checklist.md)
+- [Timed demo script](DEMO_SCRIPT.md) and [viva preparation](VIVA_PREPARATION.md)
+- [Security/performance review](day-6-security-and-performance-review.md) and [release report](day-6-release-report.md)
+- Sanitized raw results: [`evidence/day-6/`](evidence/day-6/)
+- Dataset declaration and scope assessment: [dataset provenance](dataset-provenance.md)

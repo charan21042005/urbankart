@@ -53,3 +53,25 @@ The requested SRS Blueprint, 6-Day Roadmap, and Day 5 DeepDive DOCX references h
 | D5-04 / SRS §12; Roadmap and DeepDive acceptance criteria | Verify frontend states and chart data integration | `client/src/pages/AdminDashboard.jsx`, `RecommendationSection.jsx`, API clients | Client tests 60/60; build passed. **PASS** |
 
 The prior Day 1–4 evidence and limitations remain historical/current as individually labelled above. Day 6 reviews and performance benchmarking are outside this task. Dataset licence declaration and third-party rights stay separately documented in [`dataset-provenance.md`](dataset-provenance.md): declaration `DECLARED_CC_BY_SA_4_0`, overall redistribution clearance `AMBER`.
+## Day 6 final traceability — 2026-10-14
+
+The Day 6 mission supplied the current SRS, roadmap, and Day 6 DeepDive paths; they were read from those paths. The earlier statement above that the SRS was unavailable describes the 2026-10-13 follow-up and is historical. Where an attachment's directions conflict with the user's Day 6 mission or actual code, the user mission and verified implementation are authoritative. The six module names below are from SRS §4.
+
+| SRS module | Current implementation | Day 6 evidence | Status |
+|---|---|---|---|
+| M1 — Product & Catalog Service | Product model, flexible attributes, listing/search/category/admin product routes, guarded CSV importer, category/price and text indexes | 19,159-product import, Vite/API catalog smoke, actual explain plans, 85 server tests | **PASS for implementation; rights remain AMBER for redistribution** |
+| M2 — Cart & Checkout Service | User-scoped embedded carts, stock validation, transaction checkout, idempotency/reconciliation | HTTP smoke, 20-way race (1/19), rollback and idempotency scripts | **PASS** |
+| M3 — Order & Review Service | Order snapshots and status model; Review schema/collection/indexes | Checkout verified persisted order snapshot; current route inventory contains no review API/service | **PARTIAL** — review operations are not implemented as a route |
+| M4 — Recommendation Engine | Scheduled content-based scorer, full-catalog batch recompute, bounded explained cache, read fallback | 19,159 cache docs, 95,509 related entries, scorer bounds regression, recommendation tests | **PASS for implemented content-based scope**; Atlas Vector Search not implemented |
+| M5 — Analytics & Aggregation Layer | Admin-only `$facet` dashboard for revenue/category, top products, and order statuses | Admin login/dashboard 200; customer 403; server route/aggregation tests | **PASS** |
+| M6 — Web Application (React + Express API) | React/Vite storefront/admin UI and Express API with Vite `/api` proxy | 60 client tests, successful build, live API/Vite proxy/customer/admin HTTP smoke | **PASS WITH VISUAL LIMITATION** — Day 6 browser screenshot/visual inspection unavailable |
+
+## Day 6 verification record
+
+- Server suite: 85 passed, 0 failed. Client suite: 60 passed, 0 failed. Production build succeeded; 749.15 kB minified JS advisory remains.
+- Clean local setup imported 19,159 products, verified seven DB validators and 14 declared indexes, persisted 19,159 recommendation records/95,509 related entries, and retained them across a subsequent restart of the verified local replica set.
+- Real index explains show category `IXSCAN` after adding the declared index and text `TEXT_MATCH` via the weighted text index. Category examined docs fell from 19,159 to 5,659, but observed time was 13 ms before and 21 ms after; no speedup claim is made. See [`day-6-indexing-evidence.md`](day-6-indexing-evidence.md).
+- Full dataset/source declaration remains `DECLARED_CC_BY_SA_4_0`; overall redistribution clearance remains **AMBER — declared licence, scope/third-party rights not fully verified**. The live Kaggle page's complete notices/uploader authority and individual third-party image/description rights were not established; no legal guarantee is implied.
+- Docker Engine unavailable/no container definitions; one-command container startup **BLOCKED**. GUI screenshots not captured. Change Streams, Atlas Vector Search, and GridFS remain unimplemented stretch goals.
+
+See [`final-project-acceptance-checklist.md`](final-project-acceptance-checklist.md) and [`day-6-release-report.md`](day-6-release-report.md) for the overall verdict and tag decision.

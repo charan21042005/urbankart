@@ -1,6 +1,6 @@
 const Product = require('../models/Product');
 const Recommendation = require('../models/Recommendation');
-const { extractFeatures, normalizeText, similarityScore, stableId } = require('./similarityScorer');
+const { extractFeatures, normalizeText, similarityScoreFromCounts, similarityScoreFromFeatures, stableId } = require('./similarityScorer');
 
 const MAX_RECOMMENDATIONS = 5;
 const MIN_RELEVANCE_SCORE = 0.2;
@@ -13,50 +13,109 @@ function compareStrings(left, right) {
 function buildCandidateIndexes(products) {
   const byCategory = new Map();
   const byFeature = new Map();
+  const byId = new Map();
+  const featuresById = new Map();
+  const categoryById = new Map();
   for (const product of products) {
     const id = stableId(product);
+    const features = extractFeatures(product);
     const category = normalizeText(product.category);
+    byId.set(id, product);
+    featuresById.set(id, features);
+    categoryById.set(id, category);
     if (category) {
       if (!byCategory.has(category)) byCategory.set(category, []);
       byCategory.get(category).push(product);
     }
-    for (const key of extractFeatures(product).keys()) {
+    for (const key of features.keys()) {
       if (!byFeature.has(key)) byFeature.set(key, []);
       byFeature.get(key).push(product);
     }
     product.__recommendationStableId = id;
   }
-  return { byCategory, byFeature };
+  return { byCategory, byFeature, byId, featuresById, categoryById };
 }
 
-function rankRecommendations(source, products, indexes) {
-  const candidateIds = new Set();
-  const category = normalizeText(source.category);
-  if (category) {
-    for (const product of indexes.byCategory.get(category) || []) candidateIds.add(product.__recommendationStableId);
+function insertTopRecommendation(best, ranked) {
+  const position = best.findIndex((current) => ranked.score > current.score
+    || (ranked.score === current.score
+      && compareStrings(ranked.candidateId, current.candidateId) < 0));
+  if (position === -1) {
+    if (best.length < MAX_RECOMMENDATIONS) best.push(ranked);
+  } else {
+    best.splice(position, 0, ranked);
+    if (best.length > MAX_RECOMMENDATIONS) best.pop();
   }
-  for (const key of extractFeatures(source).keys()) {
-    for (const product of indexes.byFeature.get(key) || []) candidateIds.add(product.__recommendationStableId);
+}
+
+function rankRecommendations(source, _products, indexes) {
+  const sourceId = source.__recommendationStableId || stableId(source);
+  const category = indexes.categoryById.get(sourceId) ?? normalizeText(source.category);
+  const categoryCandidates = category ? indexes.byCategory.get(category) || [] : [];
+  const sourceFeatures = indexes.featuresById.get(sourceId) || new Map();
+  const featureCandidateSharedCounts = new Map();
+  for (const key of sourceFeatures.keys()) {
+    for (const product of indexes.byFeature.get(key) || []) {
+      const candidateId = product.__recommendationStableId;
+      if (candidateId !== sourceId) {
+        featureCandidateSharedCounts.set(candidateId, (featureCandidateSharedCounts.get(candidateId) || 0) + 1);
+      }
+    }
   }
 
-  return products
-    .filter((candidate) => candidate.__recommendationStableId !== source.__recommendationStableId
-      && candidateIds.has(candidate.__recommendationStableId))
-    .map((candidate) => ({ candidate, explanation: similarityScore(source, candidate) }))
-    .filter(({ explanation }) => explanation.score >= MIN_RELEVANCE_SCORE)
-    .sort((left, right) => right.explanation.score - left.explanation.score
-      || compareStrings(left.candidate.__recommendationStableId, right.candidate.__recommendationStableId))
-    .slice(0, MAX_RECOMMENDATIONS)
-    .map(({ candidate, explanation }) => ({
+  // A shared feature is the only way for the Jaccard component to be positive.
+  // Same-category candidates without shared features all score exactly 0.2,
+  // so consider them only as deterministic fillers after scoring feature hits.
+  const best = [];
+  for (const [candidateId, sharedFeatureCount] of featureCandidateSharedCounts) {
+    const candidate = indexes.byId.get(candidateId);
+    if (!candidate) continue;
+    const candidateFeatures = indexes.featuresById.get(candidateId) || new Map();
+    const categoryMatch = Boolean(category && indexes.categoryById.get(candidateId) === category);
+    const computed = similarityScoreFromCounts(
+      sourceFeatures.size,
+      candidateFeatures.size,
+      sharedFeatureCount,
+      categoryMatch
+    );
+    if (computed.score < MIN_RELEVANCE_SCORE) continue;
+    insertTopRecommendation(best, {
+      candidate, candidateId, score: computed.score, categoryMatch, sharedFeatureCount,
+      unionFeatureCount: computed.unionFeatureCount
+    });
+  }
+
+  for (const candidate of categoryCandidates) {
+    if (best.length === MAX_RECOMMENDATIONS) break;
+    const candidateId = candidate.__recommendationStableId;
+    if (candidateId === sourceId || featureCandidateSharedCounts.has(candidateId)) continue;
+    const candidateFeatureCount = indexes.featuresById.get(candidateId)?.size || 0;
+    insertTopRecommendation(best, {
+      candidate, candidateId, score: 0.2, categoryMatch: true, sharedFeatureCount: 0,
+      unionFeatureCount: sourceFeatures.size + candidateFeatureCount
+    });
+  }
+
+  return best.map(({ candidate, candidateId, score }) => {
+    const explanation = similarityScoreFromFeatures(
+      source,
+      candidate,
+      sourceFeatures,
+      indexes.featuresById.get(candidateId),
+      indexes.categoryById.get(sourceId),
+      indexes.categoryById.get(candidateId)
+    );
+    return {
       productId: candidate._id,
-      score: explanation.score,
+      score,
       sharedTags: explanation.sharedTags,
       sharedAttributes: explanation.sharedAttributes,
       categoryMatch: explanation.categoryMatch,
       categoryBonus: explanation.categoryBonus,
       sharedFeatureCount: explanation.sharedFeatureCount,
       unionFeatureCount: explanation.unionFeatureCount
-    }));
+    };
+  });
 }
 
 async function recomputeRecommendations({

@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-14",
+  "apiOrigin": "http://127.0.0.1:5000",
+  "viteOrigin": "http://127.0.0.1:5173",
+  "database": "urbankart_day6_verification",
+  "replicaSet": "ukDay6Verification",
+  "results": {
+    "health": 200,
+    "viteCatalogProxy": 200,
+    "register": 201,
+    "duplicateRegistration": 409,
+    "login": 200,
+    "addCartItem": 201,
+    "checkout": 201,
+    "persistedOrderPresent": true,
+    "orderSnapshotItemCount": 1,
+    "productStockAfterCheckout": 0,
+    "adminLogin": 200,
+    "adminDashboard": 200,
+    "customerAdminDashboardDenied": 403
+  },
+  "cleanup": {
+    "syntheticUsersRemaining": 0,
+    "syntheticProductRemaining": false
+  },
+  "credentialsOrTokensRecorded": false,
+  "visualBrowserInspection": "not performed; no browser capture tool available"
+}

@@ -1,0 +1,519 @@
+{
+  "generatedAt": "2026-10-14T10:40:24.880Z",
+  "sourceDatabase": "urbankart_day6_verification",
+  "targetDatabase": "urbankart_day6_index_benchmark",
+  "replicaSet": "ukDay6Verification",
+  "loopbackPrimary": true,
+  "productDocumentsCopied": 19159,
+  "benchmarkInitialIndexes": [
+    {
+      "name": "_id_",
+      "key": {
+        "_id": 1
+      }
+    }
+  ],
+  "categoryQuery": {
+    "filter": {
+      "category": "Clothing"
+    },
+    "sort": {
+      "price": 1,
+      "_id": 1
+    },
+    "limit": 20,
+    "matchingDocuments": 5659
+  },
+  "categoryBefore": {
+    "queryPlanner": {
+      "namespace": "urbankart_day6_index_benchmark.products",
+      "parsedQuery": {
+        "category": {
+          "$eq": "Clothing"
+        }
+      },
+      "indexFilterSet": false,
+      "queryHash": "64BC4685",
+      "planCacheShapeHash": "64BC4685",
+      "planCacheKey": "B3C23696",
+      "optimizationTimeMillis": 0,
+      "maxIndexedOrSolutionsReached": false,
+      "maxIndexedAndSolutionsReached": false,
+      "maxScansToExplodeReached": false,
+      "prunedSimilarIndexes": false,
+      "winningPlan": {
+        "isCached": false,
+        "stage": "SORT",
+        "sortPattern": {
+          "price": 1,
+          "_id": 1
+        },
+        "memLimit": 104857600,
+        "limitAmount": 20,
+        "type": "simple",
+        "inputStage": {
+          "stage": "COLLSCAN",
+          "filter": {
+            "category": {
+              "$eq": "Clothing"
+            }
+          },
+          "nss": "urbankart_day6_index_benchmark.products",
+          "direction": "forward"
+        }
+      },
+      "rejectedPlans": []
+    },
+    "executionStats": {
+      "executionSuccess": true,
+      "nReturned": 20,
+      "executionTimeMillis": 13,
+      "totalKeysExamined": 0,
+      "totalDocsExamined": 19159,
+      "executionStages": {
+        "isCached": false,
+        "stage": "SORT",
+        "nReturned": 20,
+        "executionTimeMillisEstimate": 3,
+        "works": 19181,
+        "advanced": 20,
+        "needTime": 19160,
+        "needYield": 0,
+        "saveState": 0,
+        "restoreState": 0,
+        "isEOF": 1,
+        "sortPattern": {
+          "price": 1,
+          "_id": 1
+        },
+        "memLimit": 104857600,
+        "limitAmount": 20,
+        "type": "simple",
+        "totalDataSizeSorted": 23790,
+        "usedDisk": false,
+        "spills": 0,
+        "spilledRecords": 0,
+        "spilledBytes": 0,
+        "spilledDataStorageSize": 0,
+        "peakTrackedMemBytes": 25835,
+        "inputStage": {
+          "stage": "COLLSCAN",
+          "filter": {
+            "category": {
+              "$eq": "Clothing"
+            }
+          },
+          "nReturned": 5659,
+          "executionTimeMillisEstimate": 3,
+          "works": 19160,
+          "advanced": 5659,
+          "needTime": 13500,
+          "needYield": 0,
+          "saveState": 0,
+          "restoreState": 0,
+          "isEOF": 1,
+          "nss": "urbankart_day6_index_benchmark.products",
+          "direction": "forward",
+          "docsExamined": 19159
+        }
+      }
+    }
+  },
+  "categoryAfter": {
+    "queryPlanner": {
+      "namespace": "urbankart_day6_index_benchmark.products",
+      "parsedQuery": {
+        "category": {
+          "$eq": "Clothing"
+        }
+      },
+      "indexFilterSet": false,
+      "queryHash": "64BC4685",
+      "planCacheShapeHash": "64BC4685",
+      "planCacheKey": "4C63EEFD",
+      "optimizationTimeMillis": 0,
+      "maxIndexedOrSolutionsReached": false,
+      "maxIndexedAndSolutionsReached": false,
+      "maxScansToExplodeReached": false,
+      "prunedSimilarIndexes": false,
+      "winningPlan": {
+        "isCached": false,
+        "stage": "SORT",
+        "sortPattern": {
+          "price": 1,
+          "_id": 1
+        },
+        "memLimit": 104857600,
+        "limitAmount": 20,
+        "type": "simple",
+        "inputStage": {
+          "stage": "FETCH",
+          "nss": "urbankart_day6_index_benchmark.products",
+          "inputStage": {
+            "stage": "IXSCAN",
+            "nss": "urbankart_day6_index_benchmark.products",
+            "keyPattern": {
+              "category": 1,
+              "price": 1
+            },
+            "indexName": "idx_products_category_price",
+            "isMultiKey": false,
+            "multiKeyPaths": {
+              "category": [],
+              "price": []
+            },
+            "isUnique": false,
+            "isSparse": false,
+            "isPartial": false,
+            "indexVersion": 2,
+            "direction": "forward",
+            "indexBounds": {
+              "category": [
+                "[\"Clothing\", \"Clothing\"]"
+              ],
+              "price": [
+                "[MinKey, MaxKey]"
+              ]
+            }
+          }
+        }
+      },
+      "rejectedPlans": []
+    },
+    "executionStats": {
+      "executionSuccess": true,
+      "nReturned": 20,
+      "executionTimeMillis": 21,
+      "totalKeysExamined": 5659,
+      "totalDocsExamined": 5659,
+      "executionStages": {
+        "isCached": false,
+        "stage": "SORT",
+        "nReturned": 20,
+        "executionTimeMillisEstimate": 14,
+        "works": 5681,
+        "advanced": 20,
+        "needTime": 5660,
+        "needYield": 0,
+        "saveState": 1,
+        "restoreState": 1,
+        "isEOF": 1,
+        "sortPattern": {
+          "price": 1,
+          "_id": 1
+        },
+        "memLimit": 104857600,
+        "limitAmount": 20,
+        "type": "simple",
+        "totalDataSizeSorted": 23790,
+        "usedDisk": false,
+        "spills": 0,
+        "spilledRecords": 0,
+        "spilledBytes": 0,
+        "spilledDataStorageSize": 0,
+        "peakTrackedMemBytes": 23790,
+        "inputStage": {
+          "stage": "FETCH",
+          "nReturned": 5659,
+          "executionTimeMillisEstimate": 14,
+          "works": 5660,
+          "advanced": 5659,
+          "needTime": 0,
+          "needYield": 0,
+          "saveState": 1,
+          "restoreState": 1,
+          "isEOF": 1,
+          "nss": "urbankart_day6_index_benchmark.products",
+          "docsExamined": 5659,
+          "alreadyHasObj": 0,
+          "inputStage": {
+            "stage": "IXSCAN",
+            "nReturned": 5659,
+            "executionTimeMillisEstimate": 0,
+            "works": 5660,
+            "advanced": 5659,
+            "needTime": 0,
+            "needYield": 0,
+            "saveState": 1,
+            "restoreState": 1,
+            "isEOF": 1,
+            "nss": "urbankart_day6_index_benchmark.products",
+            "keyPattern": {
+              "category": 1,
+              "price": 1
+            },
+            "indexName": "idx_products_category_price",
+            "isMultiKey": false,
+            "multiKeyPaths": {
+              "category": [],
+              "price": []
+            },
+            "isUnique": false,
+            "isSparse": false,
+            "isPartial": false,
+            "indexVersion": 2,
+            "direction": "forward",
+            "indexBounds": {
+              "category": [
+                "[\"Clothing\", \"Clothing\"]"
+              ],
+              "price": [
+                "[MinKey, MaxKey]"
+              ]
+            },
+            "keysExamined": 5659,
+            "seeks": 1,
+            "dupsTested": 0,
+            "dupsDropped": 0,
+            "peakTrackedMemBytes": 0
+          }
+        }
+      }
+    }
+  },
+  "textQuery": {
+    "searchTerm": "Alisha",
+    "sort": {
+      "score": {
+        "$meta": "textScore"
+      },
+      "createdAt": -1,
+      "_id": 1
+    },
+    "limit": 20
+  },
+  "textAfter": {
+    "queryPlanner": {
+      "namespace": "urbankart_day6_index_benchmark.products",
+      "parsedQuery": {
+        "$text": {
+          "$search": "Alisha",
+          "$language": "english",
+          "$caseSensitive": false,
+          "$diacriticSensitive": false
+        }
+      },
+      "indexFilterSet": false,
+      "queryHash": "CCF3EAAF",
+      "planCacheShapeHash": "CCF3EAAF",
+      "planCacheKey": "6A14792C",
+      "optimizationTimeMillis": 7,
+      "maxIndexedOrSolutionsReached": false,
+      "maxIndexedAndSolutionsReached": false,
+      "maxScansToExplodeReached": false,
+      "prunedSimilarIndexes": false,
+      "winningPlan": {
+        "isCached": false,
+        "stage": "PROJECTION_DEFAULT",
+        "transformBy": {
+          "score": {
+            "$meta": "textScore"
+          }
+        },
+        "inputStage": {
+          "stage": "SORT",
+          "sortPattern": {
+            "$computed0": {
+              "$meta": "textScore"
+            },
+            "createdAt": -1,
+            "_id": 1
+          },
+          "memLimit": 104857600,
+          "limitAmount": 20,
+          "type": "default",
+          "inputStage": {
+            "stage": "TEXT_MATCH",
+            "nss": "urbankart_day6_index_benchmark.products",
+            "indexPrefix": {},
+            "indexName": "text_products_name_description_tags",
+            "parsedTextQuery": {
+              "terms": [
+                "alisha"
+              ],
+              "negatedTerms": [],
+              "phrases": [],
+              "negatedPhrases": []
+            },
+            "textIndexVersion": 3,
+            "inputStage": {
+              "stage": "TEXT_OR",
+              "inputStage": {
+                "stage": "IXSCAN",
+                "nss": "urbankart_day6_index_benchmark.products",
+                "keyPattern": {
+                  "_fts": "text",
+                  "_ftsx": 1
+                },
+                "indexName": "text_products_name_description_tags",
+                "isMultiKey": true,
+                "isUnique": false,
+                "isSparse": false,
+                "isPartial": false,
+                "indexVersion": 2,
+                "direction": "backward",
+                "indexBounds": {}
+              }
+            }
+          }
+        }
+      },
+      "rejectedPlans": []
+    },
+    "executionStats": {
+      "executionSuccess": true,
+      "nReturned": 6,
+      "executionTimeMillis": 23,
+      "totalKeysExamined": 6,
+      "totalDocsExamined": 6,
+      "executionStages": {
+        "isCached": false,
+        "stage": "PROJECTION_DEFAULT",
+        "nReturned": 6,
+        "executionTimeMillisEstimate": 10,
+        "works": 22,
+        "advanced": 6,
+        "needTime": 15,
+        "needYield": 0,
+        "saveState": 1,
+        "restoreState": 1,
+        "isEOF": 1,
+        "transformBy": {
+          "score": {
+            "$meta": "textScore"
+          }
+        },
+        "inputStage": {
+          "stage": "SORT",
+          "nReturned": 6,
+          "executionTimeMillisEstimate": 10,
+          "works": 22,
+          "advanced": 6,
+          "needTime": 15,
+          "needYield": 0,
+          "saveState": 1,
+          "restoreState": 1,
+          "isEOF": 1,
+          "sortPattern": {
+            "$computed0": {
+              "$meta": "textScore"
+            },
+            "createdAt": -1,
+            "_id": 1
+          },
+          "memLimit": 104857600,
+          "limitAmount": 20,
+          "type": "default",
+          "totalDataSizeSorted": 7440,
+          "usedDisk": false,
+          "spills": 0,
+          "spilledRecords": 0,
+          "spilledBytes": 0,
+          "spilledDataStorageSize": 0,
+          "peakTrackedMemBytes": 7440,
+          "inputStage": {
+            "stage": "TEXT_MATCH",
+            "nReturned": 6,
+            "executionTimeMillisEstimate": 10,
+            "works": 15,
+            "advanced": 6,
+            "needTime": 8,
+            "needYield": 0,
+            "saveState": 1,
+            "restoreState": 1,
+            "isEOF": 1,
+            "nss": "urbankart_day6_index_benchmark.products",
+            "indexPrefix": {},
+            "indexName": "text_products_name_description_tags",
+            "parsedTextQuery": {
+              "terms": [
+                "alisha"
+              ],
+              "negatedTerms": [],
+              "phrases": [],
+              "negatedPhrases": []
+            },
+            "textIndexVersion": 3,
+            "docsRejected": 0,
+            "inputStage": {
+              "stage": "TEXT_OR",
+              "nReturned": 6,
+              "executionTimeMillisEstimate": 10,
+              "works": 15,
+              "advanced": 6,
+              "needTime": 8,
+              "needYield": 0,
+              "saveState": 1,
+              "restoreState": 1,
+              "isEOF": 1,
+              "docsExamined": 6,
+              "usedDisk": false,
+              "spills": 0,
+              "spilledRecords": 0,
+              "spilledBytes": 0,
+              "spilledDataStorageSize": 0,
+              "peakTrackedMemBytes": 7104,
+              "inputStage": {
+                "stage": "IXSCAN",
+                "nReturned": 6,
+                "executionTimeMillisEstimate": 10,
+                "works": 7,
+                "advanced": 6,
+                "needTime": 0,
+                "needYield": 0,
+                "saveState": 1,
+                "restoreState": 1,
+                "isEOF": 1,
+                "nss": "urbankart_day6_index_benchmark.products",
+                "keyPattern": {
+                  "_fts": "text",
+                  "_ftsx": 1
+                },
+                "indexName": "text_products_name_description_tags",
+                "isMultiKey": true,
+                "isUnique": false,
+                "isSparse": false,
+                "isPartial": false,
+                "indexVersion": 2,
+                "direction": "backward",
+                "indexBounds": {},
+                "keysExamined": 6,
+                "seeks": 1,
+                "dupsTested": 6,
+                "dupsDropped": 0,
+                "peakTrackedMemBytes": 54
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "finalIndexes": [
+    {
+      "name": "_id_",
+      "key": {
+        "_id": 1
+      }
+    },
+    {
+      "name": "idx_products_category_price",
+      "key": {
+        "category": 1,
+        "price": 1
+      }
+    },
+    {
+      "name": "text_products_name_description_tags",
+      "key": {
+        "_fts": "text",
+        "_ftsx": 1
+      },
+      "weights": {
+        "description": 2,
+        "name": 10,
+        "tags": 4
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-14",
+  "database": "urbankart_day6_verification",
+  "replicaSet": "ukDay6Verification",
+  "replay": { "firstStatus": 201, "replayStatus": 200, "sameOrder": true },
+  "userScopedKey": { "crossUserLookup": 404, "sameKeyIndependentAcrossUsers": true },
+  "changedCart": { "status": 409, "stockUnchanged": true, "cartPreserved": true },
+  "insufficientStock": { "status": 409, "orders": 0, "stock": 1, "cartItems": 1 },
+  "lostResponse": { "responseDiscardedAfterRequestFlush": true, "reconciliationStatus": 200 },
+  "concurrentSameKey": { "statuses": [200, 201], "orders": 1 },
+  "rollbackAfterOperationWrite": { "status": 503, "orders": 0, "operations": 0, "stock": 4, "cartItems": 1 },
+  "result": "passed"
+}

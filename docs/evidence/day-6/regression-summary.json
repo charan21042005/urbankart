@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-14",
+  "shellNote": "PowerShell npm.ps1 policy blocked the npm shim; npm.cmd ran the package scripts.",
+  "server": {
+    "command": "npm.cmd test",
+    "passed": 85,
+    "failed": 0,
+    "exitCode": 0
+  },
+  "client": {
+    "command": "npm.cmd exec vitest run -- --pool=threads --maxWorkers=1",
+    "filesPassed": 9,
+    "testsPassed": 60,
+    "failed": 0,
+    "durationSeconds": 72.99,
+    "exitCode": 0
+  },
+  "build": {
+    "command": "npm.cmd run build",
+    "modulesTransformed": 750,
+    "javascriptMinifiedKilobytes": 749.15,
+    "javascriptGzipKilobytes": 224.17,
+    "exitCode": 0,
+    "advisory": "Vite warns about chunks larger than 500 kB after minification."
+  }
+}

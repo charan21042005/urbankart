@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 ![UrbanKart Header](https://capsule-render.vercel.app/api?type=waving&color=0:C21500,50:FFC500,100:11998E&height=220&section=header&text=%F0%9F%9B%92%20UrbanKart&fontSize=75&fontAlignY=38&animation=twinkling&v=6)
 
@@ -117,8 +117,8 @@ The flow of data through UrbanKart prioritizes separation of concerns and databa
 Stage H now verifies the idempotent checkout and reconciliation contract against an isolated local replica set; see [the client Stage H notes](client/README.md#stage-h-idempotent-checkout-and-order-reconciliation).
 The Stage F statement below is historical and is superseded by the Stage G and Stage H local replica-set verification records.
 
-### Recommendation Flow (📅 Planned logic, Schema ✅ Implemented)
-`Offline Job` → `Compute Similarity` → `Overwrite recommendations collection` → `Client queries O(1) Materialized View`
+### Recommendation Flow (Implemented and locally verified)
+`Scheduled batch job` → `typed-feature Jaccard plus category bonus` → `bounded top-five cache` → `client cache or labelled fallback`
 
 ## 🧩 7. Core Collections and Operation Records
 
@@ -401,6 +401,43 @@ The PromptCloudHQ [Flipkart Products dataset on Kaggle](https://www.kaggle.com/d
 The detailed [Days 1–4 completion report](_day-notes/day-01-04/DAYS_01_04_COMPLETION.md) is the current evidence record and explicitly separates offline tests, disposable-local-MongoDB tests, live local HTTP checks, and browser QA. Earlier work verified idempotent checkout/reconciliation, rollback, and the 20-request stock race on a task-owned MongoDB 8.3.7 replica set. This follow-up created a separate loopback-only local development database under `%LOCALAPPDATA%` with 19,159 products and seven validators. Atlas and the existing `test` database were not contacted; the raw CSV remains Git-ignored and the local database is outside Git/OneDrive.
 
 The API and Vite proxy completed a direct HTTP storefront/cart/checkout sequence, including a persisted order and reconciliation. A prior isolated local HTTP check also verified customer admin CRUD and checkout through Vite/Express against synthetic local data, then the catalog was imported into a separate persistent loopback-only database. This final recheck initialized a distinct empty test database on the same verified loopback replica set and reran MongoDB validation, idempotency, rollback, and concurrency tests; the detailed report records its exact counts. Current offline tests pass (server 65/65, client 44/44), the client production build passes, dependency listings pass, syntax checks pass across 44 JavaScript files, and the importer dry run parsed 20,000 rows without writes. A fresh normal visible Chrome launch exited before rendering with GPU process exit `-1073741790` and `GPU process isn't usable`; no screenshot was captured. Previous Stage G/H screenshots are historical, not evidence for this diff. The roadmap and Day 1–3 guides were readable during the latest requirements recheck; the SRS and Day 4 guide remained locked and could not be independently reread. Days 1–4 remain **partially complete** pending browser QA, complete review of those two locked source documents, and dataset-license clarification.
+
+
+## Day 6 verification and local evaluation
+
+Day 6 re-verification passed 85/85 server tests, 60/60 client tests, and the production build. A fresh local replica set imported 19,159 products, persisted 19,159 recommendation caches with 95,509 related entries, and passed API/Vite proxy, transactional checkout, admin authorization, concurrency, rollback, idempotency, and restart-persistence checks. The 20-request final-unit race returned one success and 19 stock conflicts. See [Day 6 reports](docs/day-6-baseline-audit.md), [acceptance checklist](docs/final-project-acceptance-checklist.md), and [timed demo](docs/DEMO_SCRIPT.md).
+
+For a new disposable Windows local rehearsal, use a new task-specific data directory. Start MongoDB in one terminal:
+
+```powershell
+$mongoDataPath = Join-Path $env:LOCALAPPDATA 'UrbanKart\mongo-day6-local'
+New-Item -ItemType Directory -Force -Path $mongoDataPath | Out-Null
+mongod --dbpath $mongoDataPath --port 27221 --bind_ip 127.0.0.1 --replSet ukLocal
+```
+
+Once, from a second terminal for that fresh directory, initiate the local single-member replica set:
+
+```powershell
+mongosh 'mongodb://127.0.0.1:27221/admin' --quiet --eval "rs.initiate({_id: 'ukLocal', members: [{_id: 0, host: '127.0.0.1:27221'}]})"
+```
+
+In a new `server/` terminal, set process-scoped local configuration, install validators, and (if the ignored CSV is present and intended for local use) import it. The importer assigns synthetic stock zero because the source contains no inventory field. Do not point these commands at Atlas or a real/demo database. On Windows PowerShell, use `npm.cmd` if script policy blocks `npm`.
+
+```powershell
+$env:MONGODB_URI = 'mongodb://127.0.0.1:27221/urbankart_day6_local?replicaSet=ukLocal'
+$env:URBANKART_EXPECTED_DB_NAME = 'urbankart_day6_local'
+$env:URBANKART_DB_ENV = 'isolated-development'
+$env:URBANKART_TXN_TOPOLOGY_CONFIRMED = 'replicaSet'
+$env:URBANKART_TXN_REPLICA_SET_NAME = 'ukLocal'
+$env:JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+npm.cmd run db:init:local -- --confirm-local-db urbankart_day6_local
+npm.cmd run import:products -- --import --stock-default 0 --confirm-local-db urbankart_day6_local
+node server.js
+```
+
+In another terminal, run `cd client`, `npm.cmd install` if needed, then `npm.cmd run dev -- --host 127.0.0.1`; open `http://127.0.0.1:5173/`. Recommendation caches can be built from the server directory with `npm.cmd run recommendations:recompute -- --confirm-local-db urbankart_day6_local`. The live verification used process-only settings and a disposable generated JWT key; it did not require editing or exposing `.env`.
+
+Docker Engine was unavailable and this repository has no Dockerfile/Compose configuration, so Docker one-command startup is not available. Day 6 GUI screenshots were not captured. The production JS bundle is 749.15 kB minified and triggers Vite's >500 kB advisory. Dataset redistribution remains AMBER; consult [dataset provenance](docs/dataset-provenance.md) before shipping catalogue-derived material. No legal clearance is implied.
 
 <div align="center">
 

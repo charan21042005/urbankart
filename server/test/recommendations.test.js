@@ -54,6 +54,29 @@ test('scorer handles category-only overlap, empty and malformed features without
   assert.equal(similarityScore({ _id: 'same', tags: ['x'] }, { _id: 'same', tags: ['x'] }).sameProduct, true);
 });
 
+test('recommendation explanations stay within database bounds without changing full feature scores', () => {
+  const longValue = 'v'.repeat(140);
+  const tags = Array.from({ length: 55 }, (_, index) => `shared-tag-${index}`);
+  const productA = {
+    _id: new mongoose.Types.ObjectId('000000000000000000000041'),
+    category: 'Home', tags,
+    attributes: [{ key: 'k'.repeat(130), value: longValue }]
+  };
+  const productB = {
+    _id: new mongoose.Types.ObjectId('000000000000000000000042'),
+    category: 'Home', tags,
+    attributes: [{ key: 'k'.repeat(130), value: longValue }]
+  };
+
+  const result = similarityScore(productA, productB);
+  assert.equal(result.score, 1);
+  assert.equal(result.sharedFeatureCount, 56);
+  assert.equal(result.sharedTags.length, 50);
+  assert.equal(result.sharedAttributes.length, 1);
+  assert.equal(result.sharedAttributes[0].key.length, 120);
+  assert.equal(result.sharedAttributes[0].value.length, 120);
+});
+
 test('ranking excludes self, filters zero-score candidates, caps at five and breaks ties by stable id', () => {
   const source = { _id: new mongoose.Types.ObjectId('000000000000000000000001'), category: 'Home', tags: ['linen'] };
   const candidates = [source, ...Array.from({ length: 7 }, (_, index) => ({
@@ -69,6 +92,55 @@ test('ranking excludes self, filters zero-score candidates, caps at five and bre
     '000000000000000000000005', '000000000000000000000006'
   ]);
   assert.equal(MIN_RELEVANCE_SCORE, 0.2);
+});
+
+test('ranking resolves the indexed candidate set without scanning the full catalogue', () => {
+  const source = { _id: new mongoose.Types.ObjectId('000000000000000000000021'), category: 'Home', tags: ['linen'] };
+  const candidate = { _id: new mongoose.Types.ObjectId('000000000000000000000022'), category: 'Home', tags: ['linen'] };
+  const indexes = buildCandidateIndexes([source, candidate]);
+  const catalogueMustNotBeScanned = new Proxy([], {
+    get(target, property, receiver) {
+      if (property === 'filter') throw new Error('ranker scanned the entire catalogue');
+      return Reflect.get(target, property, receiver);
+    }
+  });
+  const ranked = rankRecommendations(source, catalogueMustNotBeScanned, indexes);
+  assert.equal(ranked.length, 1);
+  assert.equal(ranked[0].productId.toString(), candidate._id.toString());
+});
+
+test('ranking reuses normalized feature sets built once for the catalogue', () => {
+  const source = { _id: new mongoose.Types.ObjectId(), category: 'Home', tags: ['linen'], attributes: [{ key: 'material', value: 'cotton' }] };
+  const candidate = { _id: new mongoose.Types.ObjectId(), category: 'Home', tags: ['linen'], attributes: [{ key: 'material', value: 'cotton' }] };
+  const indexes = buildCandidateIndexes([source, candidate]);
+  for (const product of [source, candidate]) {
+    Object.defineProperty(product, 'tags', { get() { throw new Error('feature set was recomputed'); } });
+    Object.defineProperty(product, 'attributes', { get() { throw new Error('feature set was recomputed'); } });
+  }
+  const ranked = rankRecommendations(source, [], indexes);
+  assert.equal(ranked.length, 1);
+  assert.equal(ranked[0].score, 1);
+});
+
+test('ranking fills tied category-only results after higher feature matches', () => {
+  const source = { _id: new mongoose.Types.ObjectId('000000000000000000000030'), category: 'Home', tags: ['linen'] };
+  const featureMatch = { _id: new mongoose.Types.ObjectId('000000000000000000000010'), category: 'Other', tags: ['linen'] };
+  const categoryOnly = [
+    { _id: new mongoose.Types.ObjectId('000000000000000000000021'), category: 'Home', tags: ['ceramic'] },
+    { _id: new mongoose.Types.ObjectId('000000000000000000000022'), category: 'Home', tags: [] },
+    { _id: new mongoose.Types.ObjectId('000000000000000000000023'), category: 'Home', tags: ['glass'] },
+    { _id: new mongoose.Types.ObjectId('000000000000000000000024'), category: 'Home', tags: [] },
+    { _id: new mongoose.Types.ObjectId('000000000000000000000025'), category: 'Home', tags: [] }
+  ];
+  const products = [source, ...categoryOnly, featureMatch];
+  const ranked = rankRecommendations(source, products, buildCandidateIndexes(products));
+  assert.equal(ranked.length, 5);
+  assert.equal(ranked[0].productId.toString(), featureMatch._id.toString());
+  assert.deepEqual(ranked.slice(1).map((item) => item.productId.toString()), [
+    '000000000000000000000021', '000000000000000000000022',
+    '000000000000000000000023', '000000000000000000000024'
+  ]);
+  assert.ok(ranked.slice(1).every((item) => item.score === 0.2 && item.categoryMatch));
 });
 
 test('recompute persists explained top results and removes stale source caches after a full pass', async () => {

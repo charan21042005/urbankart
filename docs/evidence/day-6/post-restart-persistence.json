@@ -1,0 +1,11 @@
+{
+  "date": "2026-10-14",
+  "database": "urbankart_day6_verification",
+  "replicaSet": "ukDay6Verification",
+  "replicaSetPrimaryAfterRestart": true,
+  "products": 19159,
+  "recommendationDocuments": 19159,
+  "relatedProducts": 95509,
+  "validators": 7,
+  "result": "passed after restart of task-owned mongod using the task-owned data directory"
+}
