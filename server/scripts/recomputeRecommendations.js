@@ -1,12 +1,20 @@
 const mongoose = require('mongoose');
+const { loadSelectedDatabaseEnvironment } = require('../config/databaseEnvironment');
 const safety = require('./databaseSafety');
 const Product = require('../models/Product');
 const Recommendation = require('../models/Recommendation');
 const { recomputeRecommendations } = require('../jobs/computeRecommendations');
+const { acquireRecommendationSchedulerLock } = require('../jobs/recommendationSchedulerLock');
+
+let schedulerLease;
 
 async function main() {
+  loadSelectedDatabaseEnvironment();
+  schedulerLease = acquireRecommendationSchedulerLock();
+  if (!schedulerLease) throw new safety.SafetyError('Another recommendation job or integration run holds the scheduler lock.');
+  const atlasMode = process.env.URBANKART_DB_PROFILE === 'atlas-demo';
   const target = await safety.connectAfterPreflight({
-    mode: 'local-write',
+    mode: atlasMode ? 'atlas-demo-write' : 'local-write',
     argv: process.argv.slice(2),
     connect: (uri) => mongoose.connect(uri, {
       serverSelectionTimeoutMS: 10_000,
@@ -15,7 +23,10 @@ async function main() {
     })
   });
   const hello = await mongoose.connection.db.admin().command({ hello: 1 });
-  safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
+  if (atlasMode) {
+    const build = await mongoose.connection.db.admin().command({ buildInfo: 1 });
+    safety.validateAtlasDemoHello(hello, build.versionArray, target.expectedTopology);
+  } else safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
   await Promise.all([Product, Recommendation].map((model) => model.createIndexes()));
   const indexes = await Recommendation.collection.indexes();
   if (!indexes.some((index) => index.name === 'uniq_recommendation_source'
@@ -23,7 +34,7 @@ async function main() {
     throw new safety.SafetyError('The required unique recommendation-source index is unavailable.');
   }
   const result = await recomputeRecommendations();
-  console.log(JSON.stringify({ database: target.databaseName, replicaSet: hello.setName, ...result }));
+  console.log(JSON.stringify({ database: target.databaseName, topology: atlasMode ? target.expectedTopology : hello.setName, ...result }));
 }
 
 main().catch((error) => {
@@ -32,4 +43,11 @@ main().catch((error) => {
   process.exitCode = 1;
 }).finally(async () => {
   if (mongoose.connection.readyState !== 0) await mongoose.disconnect().catch(() => {});
+  if (schedulerLease) {
+    try { await schedulerLease.release(); }
+    catch (error) {
+      console.error(`Recommendation scheduler lock release failed (${error?.name || 'Error'}).`);
+      process.exitCode = 1;
+    }
+  }
 });

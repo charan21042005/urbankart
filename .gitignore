@@ -13,6 +13,7 @@ out/
 .env.development.local
 .env.test.local
 .env.production.local
+server/.env.atlas.local
 
 # IDE/editor files
 .vscode/

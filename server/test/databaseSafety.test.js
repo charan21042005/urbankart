@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { test } = require('node:test');
 const mongoose = require('mongoose');
 const {
@@ -9,7 +10,10 @@ const {
   connectAfterPreflight,
   classifyTopology,
   assessTransactionVersion,
-  validateLocalReplicaSetHello
+  validateLocalReplicaSetHello,
+  validateAtlasDemoPreflight,
+  validateAtlasDemoHello,
+  validateLocalServerTarget
 } = require('../scripts/databaseSafety');
 const { readDay1SeedNames, connectReadOnly } = require('../scripts/auditDatabaseReadOnly');
 const { requireTransactionTopology } = require('../scripts/checkoutIntegrationCommon');
@@ -245,4 +249,52 @@ test('Day 1 sample seed preserves its records and is explicitly local-only and n
 test('dataset importer validates every advertised replica-set member before writes', () => {
   const importerSource = fs.readFileSync(path.resolve(__dirname, '../seed/importKaggleProducts.js'), 'utf8');
   assert.match(importerSource, /validateLocalReplicaSetHello\(hello, target\.expectedReplicaSetName\)/);
+});
+
+function atlasEnv(overrides = {}) {
+  const uri = 'mongodb+srv://atlas-user:local-test-only@demo.example.mongodb.net/urbankart_atlas_demo?retryWrites=true';
+  const host = new URL(uri).hostname.toLowerCase();
+  return {
+    MONGODB_URI: uri,
+    URBANKART_DB_PROFILE: 'atlas-demo',
+    URBANKART_EXPECTED_DB_NAME: 'urbankart_atlas_demo',
+    URBANKART_DB_ENV: 'atlas-demo',
+    URBANKART_ATLAS_CLUSTER_NAME: 'urbankart-cluster',
+    URBANKART_ATLAS_HOST_SHA256: crypto.createHash('sha256').update(host).digest('hex'),
+    URBANKART_TXN_TOPOLOGY_CONFIRMED: 'replicaSet',
+    ...overrides
+  };
+}
+
+test('Atlas demo writes require a pinned Atlas SRV endpoint and exact isolated database', () => {
+  const env = atlasEnv();
+  const result = validateAtlasDemoPreflight({ argv: ['--confirm-atlas-demo-db', 'urbankart_atlas_demo'], env });
+  assert.equal(result.databaseName, 'urbankart_atlas_demo');
+  assert.equal(result.expectedTopology, 'replicaSet');
+  const failures = [
+    { argv: [], env },
+    { argv: ['--confirm-atlas-demo-db', 'test'], env },
+    { argv: ['--confirm-atlas-demo-db', 'urbankart_atlas_demo'], env: atlasEnv({ URBANKART_DB_PROFILE: 'local' }) },
+    { argv: ['--confirm-atlas-demo-db', 'urbankart_atlas_demo'], env: atlasEnv({ URBANKART_DB_ENV: 'isolated-development' }) },
+    { argv: ['--confirm-atlas-demo-db', 'urbankart_atlas_demo'], env: atlasEnv({ URBANKART_ATLAS_HOST_SHA256: '0'.repeat(64) }) },
+    { argv: ['--confirm-atlas-demo-db', 'urbankart_atlas_demo'], env: atlasEnv({ URBANKART_ATLAS_CLUSTER_NAME: 'other-cluster' }) },
+    { argv: ['--confirm-atlas-demo-db', 'urbankart_atlas_demo'], env: atlasEnv({ URBANKART_TXN_TOPOLOGY_CONFIRMED: '' }) },
+    { argv: ['--confirm-atlas-demo-db', 'urbankart_atlas_demo'], env: atlasEnv({ MONGODB_URI: 'mongodb://127.0.0.1:27017/urbankart_atlas_demo?replicaSet=local' }) },
+    { argv: ['--confirm-atlas-demo-db', 'urbankart_atlas_demo'], env: atlasEnv({ MONGODB_URI: 'mongodb+srv://demo.example.mongodb.net/test' }) }
+  ];
+  for (const failure of failures) assert.throws(() => validateAtlasDemoPreflight(failure), SafetyError);
+});
+
+test('Atlas startup verifies the confirmed replica-set topology and transaction server version', () => {
+  assert.deepEqual(validateAtlasDemoHello({ setName: 'atlas-rs', isWritablePrimary: true }, [8, 0, 34], 'replicaSet'), {
+    name: 'replicaSet', transactionsSupported: true
+  });
+  assert.throws(() => validateAtlasDemoHello({ isWritablePrimary: true }, [8, 0, 34], 'replicaSet'), SafetyError);
+  assert.throws(() => validateAtlasDemoHello({ msg: 'isdbgrid' }, [8, 0, 34], 'replicaSet'), SafetyError);
+  assert.throws(() => validateAtlasDemoHello({ msg: 'isdbgrid' }, [4, 0, 0], 'sharded'), SafetyError);
+});
+
+test('local server refuses an Atlas URI unless Atlas profile is selected', () => {
+  assert.equal(validateLocalServerTarget(validEnv()).databaseName, dbName);
+  assert.throws(() => validateLocalServerTarget(validEnv({ MONGODB_URI: atlasEnv().MONGODB_URI })), SafetyError);
 });

@@ -1,5 +1,6 @@
 const path = require('node:path');
 const net = require('node:net');
+const crypto = require('node:crypto');
 const dotenv = require('dotenv');
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env'), quiet: true });
@@ -96,6 +97,64 @@ function validateLocalReplicaSetHello(hello, expectedName) {
   return true;
 }
 
+function validateAtlasDemoPreflight({ argv = process.argv.slice(2), env = process.env, readOnly = false }) {
+  const confirmedName = argumentValue(argv, readOnly ? '--confirm-atlas-read-db' : '--confirm-atlas-demo-db');
+  if (confirmedName !== 'urbankart_atlas_demo' || env.URBANKART_EXPECTED_DB_NAME !== 'urbankart_atlas_demo'
+      || confirmedName !== env.URBANKART_EXPECTED_DB_NAME) {
+    throw new SafetyError(`Atlas ${readOnly ? 'reads' : 'writes'} require the exact target confirmation --confirm-atlas-${readOnly ? 'read' : 'demo'}-db urbankart_atlas_demo.`);
+  }
+  if (env.URBANKART_DB_PROFILE !== 'atlas-demo' || env.URBANKART_DB_ENV !== 'atlas-demo') {
+    throw new SafetyError('Atlas writes require the explicitly selected atlas-demo environment profile.');
+  }
+  if (env.URBANKART_ATLAS_CLUSTER_NAME !== 'urbankart-cluster') {
+    throw new SafetyError('Confirm the existing Atlas cluster name as urbankart-cluster in the local Atlas profile.');
+  }
+  let parsed;
+  try { parsed = new URL(env.MONGODB_URI); }
+  catch { throw new SafetyError('Atlas profile must contain a valid MongoDB URI.'); }
+  if (parsed.protocol !== 'mongodb+srv:' || !parsed.hostname.toLowerCase().endsWith('.mongodb.net')) {
+    throw new SafetyError('Atlas writes require the selected Atlas SRV endpoint; local and arbitrary remote hosts are refused.');
+  }
+  if (getUriDatabaseName(env.MONGODB_URI) !== 'urbankart_atlas_demo') {
+    throw new SafetyError('Atlas URI must explicitly select urbankart_atlas_demo.');
+  }
+  const expectedHostHash = env.URBANKART_ATLAS_HOST_SHA256;
+  const actualHostHash = crypto.createHash('sha256').update(parsed.hostname.toLowerCase()).digest('hex');
+  if (!/^[a-f0-9]{64}$/.test(expectedHostHash || '') || actualHostHash !== expectedHostHash) {
+    throw new SafetyError('Atlas endpoint does not match the pinned local Atlas host identity.');
+  }
+  const expectedTopology = env.URBANKART_TXN_TOPOLOGY_CONFIRMED;
+  if (!['replicaSet', 'sharded'].includes(expectedTopology)) {
+    throw new SafetyError('Set the Atlas transaction topology only after checking the live cluster topology.');
+  }
+  return { databaseName: 'urbankart_atlas_demo', uri: env.MONGODB_URI, expectedTopology };
+}
+
+function validateLocalServerTarget(env = process.env) {
+  if (!env.URBANKART_EXPECTED_DB_NAME || getUriDatabaseName(env.MONGODB_URI) !== env.URBANKART_EXPECTED_DB_NAME) {
+    throw new SafetyError('Local server URI and URBANKART_EXPECTED_DB_NAME must select the same explicit database.');
+  }
+  if (env.URBANKART_DB_ENV !== 'isolated-development' || env.URBANKART_TXN_TOPOLOGY_CONFIRMED !== 'replicaSet') {
+    throw new SafetyError('Local server requires isolated-development and an explicitly confirmed local replica set.');
+  }
+  const topology = validateLocalReplicaSetUri(env.MONGODB_URI);
+  if (!env.URBANKART_TXN_REPLICA_SET_NAME || topology.replicaSet !== env.URBANKART_TXN_REPLICA_SET_NAME) {
+    throw new SafetyError('Local server replica-set name must match the URI topology.');
+  }
+  return { databaseName: env.URBANKART_EXPECTED_DB_NAME, expectedReplicaSetName: topology.replicaSet };
+}
+
+function validateAtlasDemoHello(hello, versionArray, expectedTopology) {
+  const topology = classifyTopology(hello);
+  if (topology.name !== expectedTopology || !topology.transactionsSupported) {
+    throw new SafetyError('Live Atlas topology differs from the confirmed transaction-capable topology.');
+  }
+  if (assessTransactionVersion(topology, versionArray) !== true) {
+    throw new SafetyError('Live Atlas server version does not meet the transaction support requirement.');
+  }
+  return { name: topology.name, transactionsSupported: true };
+}
+
 function validatePreflight({ mode, argv, env }) {
   const isAudit = mode === 'audit';
   const isIntegration = mode === 'integration-test';
@@ -137,7 +196,9 @@ function validatePreflight({ mode, argv, env }) {
 
 async function connectAfterPreflight({ mode, argv = process.argv.slice(2), env = process.env, connect }) {
   if (typeof connect !== 'function') throw new TypeError('A connection function is required.');
-  const target = validatePreflight({ mode, argv, env });
+  const target = mode === 'atlas-demo-write' || mode === 'atlas-demo-read'
+    ? validateAtlasDemoPreflight({ argv, env, readOnly: mode === 'atlas-demo-read' })
+    : validatePreflight({ mode, argv, env });
   const connection = await connect(target.uri);
   const selectedName = connection?.connection?.name || connection?.name;
   if (selectedName !== target.databaseName) {
@@ -175,5 +236,8 @@ module.exports = {
   classifyTopology,
   assessTransactionVersion,
   validateLocalReplicaSetUri,
-  validateLocalReplicaSetHello
+  validateLocalReplicaSetHello,
+  validateAtlasDemoPreflight,
+  validateAtlasDemoHello,
+  validateLocalServerTarget
 };

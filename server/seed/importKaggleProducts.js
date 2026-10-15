@@ -2,21 +2,20 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const csv = require('csv-parser');
-const dotenv = require('dotenv');
 const mongoose = require('mongoose');
+const { loadSelectedDatabaseEnvironment } = require('../config/databaseEnvironment');
+loadSelectedDatabaseEnvironment();
 const safety = require('../scripts/databaseSafety');
 const Product = require('../models/Product');
 const { parseProductSpecifications } = require('./parseProductSpecifications');
-
-dotenv.config({ path: path.resolve(__dirname, '../../.env'), quiet: true });
 
 const CSV_PATH = path.join(__dirname, 'data', 'flipkart_com-ecommerce_sample.csv');
 const REQUIRED_HEADERS = ['uniq_id', 'product_name', 'product_category_tree', 'discounted_price'];
 const BATCH_SIZE = 500;
 const MAX_STOCK = 2_147_483_647;
 
-function parseArguments(args) {
-  const options = { import: false, stockDefault: null, confirmDbName: null };
+function parseArguments(args, profile = process.env.URBANKART_DB_PROFILE || 'local') {
+  const options = { import: false, stockDefault: null, confirmDbName: null, confirmAtlasDemoDb: null };
   for (let index = 0; index < args.length; index += 1) {
     if (args[index] === '--import') {
       options.import = true;
@@ -36,6 +35,13 @@ function parseArguments(args) {
       }
       options.confirmDbName = value;
       index += 1;
+    } else if (args[index] === '--confirm-atlas-demo-db') {
+      const value = args[index + 1];
+      if (!value || value.startsWith('--') || options.confirmAtlasDemoDb) {
+        throw new Error('--confirm-atlas-demo-db must be supplied once with the exact Atlas demo database name.');
+      }
+      options.confirmAtlasDemoDb = value;
+      index += 1;
     } else {
       throw new Error(`Unknown argument: ${args[index]}`);
     }
@@ -43,11 +49,14 @@ function parseArguments(args) {
   if (options.import && options.stockDefault === null) {
     throw new Error('Import mode requires --stock-default <integer>; the CSV has no inventory data.');
   }
-  if (options.import && !options.confirmDbName) {
-    throw new Error('Import mode requires --confirm-local-db <database-name>.');
+  if (options.import && profile === 'atlas-demo' && (!options.confirmAtlasDemoDb || options.confirmDbName)) {
+    throw new Error('Atlas import mode requires only --confirm-atlas-demo-db urbankart_atlas_demo.');
   }
-  if (!options.import && options.confirmDbName) {
-    throw new Error('--confirm-local-db is only valid together with --import.');
+  if (options.import && profile !== 'atlas-demo' && (!options.confirmDbName || options.confirmAtlasDemoDb)) {
+    throw new Error('Local import mode requires --confirm-local-db <database-name> only.');
+  }
+  if (!options.import && (options.confirmDbName || options.confirmAtlasDemoDb)) {
+    throw new Error('Database confirmation flags are valid only together with --import.');
   }
   if (options.stockDefault !== null && (!Number.isSafeInteger(options.stockDefault) || options.stockDefault > MAX_STOCK)) {
     throw new Error('--stock-default must fit a non-negative BSON int32.');
@@ -212,8 +221,9 @@ async function runImport({ importToDatabase = false, stockDefault = 0, csvPath =
     if (importToDatabase) {
       mongoose.set('autoCreate', false);
       mongoose.set('autoIndex', false);
+      const atlasMode = process.env.URBANKART_DB_PROFILE === 'atlas-demo';
       const target = await safety.connectAfterPreflight({
-        mode: 'local-write',
+        mode: atlasMode ? 'atlas-demo-write' : 'local-write',
         argv,
         connect: (uri) => mongoose.connect(uri, {
           autoCreate: false,
@@ -222,7 +232,12 @@ async function runImport({ importToDatabase = false, stockDefault = 0, csvPath =
         })
       });
       const hello = await mongoose.connection.db.admin().command({ hello: 1 });
-      safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
+      if (atlasMode) {
+        const buildInfo = await mongoose.connection.db.admin().command({ buildInfo: 1 });
+        safety.validateAtlasDemoHello(hello, buildInfo.versionArray, target.expectedTopology);
+      } else {
+        safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
+      }
       const productInfo = await mongoose.connection.db.listCollections({ name: Product.collection.name }).next();
       if (!productInfo?.options?.validator?.$jsonSchema) {
         throw new safety.SafetyError('Initialize and verify the local products validator before importing. No rows were imported.');
@@ -316,7 +331,7 @@ async function runImport({ importToDatabase = false, stockDefault = 0, csvPath =
 }
 
 async function main() {
-  const options = parseArguments(process.argv.slice(2));
+  const options = parseArguments(process.argv.slice(2), process.env.URBANKART_DB_PROFILE || 'local');
   const summary = await runImport({
     importToDatabase: options.import,
     stockDefault: options.stockDefault === null ? 0 : options.stockDefault,

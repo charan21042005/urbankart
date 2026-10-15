@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Cart = require('../models/Cart');
 const Order = require('../models/Order');
 const safety = require('./databaseSafety');
+const { loadSelectedDatabaseEnvironment } = require('../config/databaseEnvironment');
 
 const models = [Product, User, Cart, Order];
 const SAFE_ERROR_NAMES = new Set([
@@ -97,6 +98,7 @@ function readDay1SeedNames() {
 }
 
 async function run(options = {}) {
+  loadSelectedDatabaseEnvironment();
   const argv = options.argv || process.argv.slice(2);
   const env = options.env || process.env;
   const connect = options.connect || connectReadOnly;
@@ -110,7 +112,7 @@ async function run(options = {}) {
   let exitCode = 0;
   try {
     const target = await safety.connectAfterPreflight({
-      mode: 'audit',
+      mode: process.env.URBANKART_DB_PROFILE === 'atlas-demo' ? 'atlas-demo-read' : 'audit',
       argv,
       env,
       connect: (uri) => {
