@@ -93,6 +93,20 @@ test('health and paginated public product listing work without connecting to Mon
   assert.deepEqual(await response.json(), [{ name: 'Sample' }]);
 });
 
+test('catalog defaults to indexed in-stock-first ordering and keeps an explicit newest option', async (t) => {
+  const sorts = [];
+  t.mock.method(Product, 'find', () => ({
+    sort(value) { sorts.push(value); return this; }, skip() { return this; }, limit() { return this; },
+    then(resolve, reject) { return Promise.resolve([]).then(resolve, reject); }
+  }));
+  t.mock.method(Product, 'countDocuments', async () => 0);
+  await request('/api/products');
+  await request('/api/products?sort=newest');
+  assert.deepEqual(sorts, [{ stock: -1, _id: 1 }, { createdAt: -1, _id: 1 }]);
+  assert.ok(Product.schema.indexes().some(([keys, options]) => options.name === 'idx_products_stock_id'
+    && keys.stock === -1 && keys._id === 1));
+});
+
 test('product list rejects malformed pagination and clamps large page sizes', async (t) => {
   t.mock.method(Product, 'find', () => ({
     sort() { return this; }, skip() { return this; }, limit(value) { this.value = value; return this; },
@@ -218,6 +232,28 @@ test('customers can read and update only their public profile fields', async (t)
   assert.equal(updated.status, 200);
   assert.equal((await updated.json()).name, 'After');
   assert.equal((await request('/api/users/me')).status, 401);
+});
+
+test('customers can read only their own paginated order snapshots', async (t) => {
+  const userId = new mongoose.Types.ObjectId();
+  const current = { _id: userId, name: 'Order Owner', email: 'owner@example.test', role: 'customer', isActive: true };
+  const sampleOrder = { _id: new mongoose.Types.ObjectId(), customerId: userId, status: 'pending', totalAmount: 18, items: [{ nameAtPurchase: 'Sample', priceAtPurchase: 9, qty: 2 }] };
+  let observedFilter;
+  let observedSkip;
+  t.mock.method(User, 'findById', () => ({ select: async () => current }));
+  t.mock.method(Order, 'find', (filter) => {
+    observedFilter = filter;
+    return { sort() { return this; }, skip(value) { observedSkip = value; return this; }, limit() { return this; }, lean: async () => [sampleOrder] };
+  });
+  t.mock.method(Order, 'countDocuments', async (filter) => { assert.deepEqual(filter, observedFilter); return 11; });
+  const headers = { authorization: `Bearer ${makeToken('customer', userId.toString())}` };
+  assert.equal((await request('/api/users/me/orders')).status, 401);
+  const response = await request('/api/users/me/orders?page=2&limit=5', { headers });
+  assert.equal(response.status, 200);
+  assert.deepEqual(observedFilter, { customerId: userId });
+  assert.equal(observedSkip, 5);
+  assert.deepEqual(await response.json(), { orders: [{ ...sampleOrder, _id: sampleOrder._id.toString(), customerId: userId.toString() }], page: 2, limit: 5, total: 11, totalPages: 3 });
+  assert.equal((await request('/api/users/me/orders?page=0', { headers })).status, 400);
 });
 
 test('customer management routes require a current database admin role', async (t) => {

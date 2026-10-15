@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const User = require('../models/User');
+const Order = require('../models/Order');
 const { authenticate, loadCurrentUser, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
@@ -59,6 +60,30 @@ function duplicateOrValidationError(error, res, fallback) {
 }
 
 router.get('/me', (req, res) => res.status(200).json(profile(req.currentUser)));
+
+router.get('/me/orders', async (req, res) => {
+  const pageText = req.query.page ?? '1';
+  const limitText = req.query.limit ?? '10';
+  if (!/^\d+$/.test(pageText) || !/^\d+$/.test(limitText)) {
+    return res.status(400).json({ status: 'error', message: 'Page and limit must be positive integers.' });
+  }
+  const page = Number(pageText);
+  const limit = Number(limitText);
+  if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1 || limit > 50
+    || page > Math.floor(Number.MAX_SAFE_INTEGER / limit)) {
+    return res.status(400).json({ status: 'error', message: 'Page must be positive and limit must be between 1 and 50.' });
+  }
+  try {
+    const filter = { customerId: req.currentUser._id };
+    const [orders, total] = await Promise.all([
+      Order.find(filter).sort({ orderDate: -1, _id: 1 }).skip((page - 1) * limit).limit(limit).lean(),
+      Order.countDocuments(filter)
+    ]);
+    return res.status(200).json({ orders, page, limit, total, totalPages: Math.ceil(total / limit) });
+  } catch {
+    return res.status(500).json({ status: 'error', message: 'Your orders could not be loaded.' });
+  }
+});
 
 router.patch('/me', async (req, res) => {
   const body = req.body;

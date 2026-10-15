@@ -62,6 +62,8 @@ const productSchema = new mongoose.Schema({
 
 productSchema.index({ category: 1, price: 1 }, { name: 'idx_products_category_price' });
 productSchema.index({ category: 1, createdAt: -1, _id: 1 }, { name: 'idx_products_category_created' });
+productSchema.index({ stock: -1, _id: 1 }, { name: 'idx_products_stock_id' });
+productSchema.index({ category: 1, stock: -1, _id: 1 }, { name: 'idx_products_category_stock_id' });
 productSchema.index({ createdAt: -1, _id: 1 }, { name: 'idx_products_created_id' });
 productSchema.index({ price: 1, _id: 1 }, { name: 'idx_products_price_id' });
 productSchema.index({ name: 1, _id: 1 }, { name: 'idx_products_name_id' });

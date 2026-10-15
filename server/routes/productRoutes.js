@@ -135,8 +135,9 @@ router.get('/', async (req, res) => {
   }
   const category = req.query.category;
   const search = req.query.search;
-  const requestedSort = req.query.sort === undefined ? 'newest' : req.query.sort;
+  const requestedSort = req.query.sort === undefined ? 'available' : req.query.sort;
   const sortModes = {
+    available: { stock: -1, _id: 1 },
     newest: { createdAt: -1, _id: 1 },
     'price-asc': { price: 1, _id: 1 },
     'price-desc': { price: -1, _id: 1 },
@@ -155,7 +156,7 @@ router.get('/', async (req, res) => {
   }
   const hasSearch = Boolean(search?.trim());
   const selectedSort = sortModes[requestedSort];
-  const searchSort = hasSearch && req.query.sort !== undefined
+  const searchSort = hasSearch && requestedSort !== 'available' && req.query.sort !== undefined
     ? {
       ...Object.fromEntries(Object.entries(selectedSort).filter(([field]) => field !== '_id')),
       score: { $meta: 'textScore' },

@@ -5,7 +5,7 @@ function readCount(value) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export async function getProducts({ page = 1, limit = 20, search = '', category = '', sort = 'newest', signal } = {}) {
+export async function getProducts({ page = 1, limit = 20, search = '', category = '', sort = 'available', signal } = {}) {
   const { data, headers } = await httpClient.get('/products', {
     params: { page, limit, ...(search ? { search } : {}), ...(category ? { category } : {}), ...(sort !== 'newest' ? { sort } : {}) },
     signal

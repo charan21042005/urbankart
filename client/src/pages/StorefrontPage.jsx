@@ -11,7 +11,7 @@ export default function StorefrontPage() {
   const [params, setParams] = useSearchParams();
   const search = params.get('search') || '';
   const category = params.get('category') || '';
-  const sort = params.get('sort') || 'newest';
+  const sort = params.get('sort') || 'available';
   const page = readPage(params.get('page'));
   const [draft, setDraft] = useState(search);
   const [state, setState] = useState({ status: 'loading', products: [], pagination: null, error: null });
@@ -104,11 +104,12 @@ export default function StorefrontPage() {
             {categories.map((item) => <option value={item} key={item}>{item}</option>)}
           </select></label>
           <label className="catalog-sort"><span>Sort by</span><select value={sort} onChange={(event) => setFilter('sort', event.target.value)}>
-            <option value="newest">Newest</option><option value="price-asc">Price: low to high</option>
+            <option value="available">Available first</option><option value="newest">Newest</option><option value="price-asc">Price: low to high</option>
             <option value="price-desc">Price: high to low</option><option value="name-asc">Name: A to Z</option>
           </select></label>
           {(search || category) && <button className="filter-clear" type="button" onClick={clearFilters}>Clear filters</button>}
         </form>
+        <p className="catalog-note">Purchasable items appear first. Imported catalogue rows have no inventory in their source data, so they remain browse-only until an administrator assigns stock.</p>
 
         {state.status === 'loading' && <div className="product-grid" aria-label="Loading products" aria-busy="true">{Array.from({ length: 8 }, (_, index) => <div className="product-skeleton" key={index}><span /><i /><i /></div>)}</div>}
         {state.status === 'error' && <section className="state-panel" role="alert"><p className="eyebrow">Catalogue unavailable</p><h2>We couldn't reach the collection.</h2><p>{state.error?.message || 'Please check your connection and try again.'}</p><button className="button button--dark" type="button" onClick={() => { const controller = new AbortController(); void load(controller.signal); }}>Try again</button></section>}
