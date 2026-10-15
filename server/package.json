@@ -8,7 +8,9 @@
     "import:products": "node seed/importKaggleProducts.js",
     "audit:database": "node scripts/auditDatabaseReadOnly.js",
     "db:init:local": "node scripts/initLocalDatabase.js",
+    "db:init:atlas": "node scripts/initAtlasDemoDatabase.js",
     "admin:setup:local": "node scripts/setupLocalAdmin.js",
+    "admin:setup:atlas": "node scripts/setupAtlasDemoAdmin.js",
     "test:db:validation": "node scripts/testDatabaseValidation.js",
     "test:checkout:rollback": "node scripts/testCheckoutRollback.js",
     "test:checkout:concurrency": "node scripts/testCheckoutConcurrency.js",
@@ -16,6 +18,7 @@
     "recommendations:recompute": "node scripts/recomputeRecommendations.js",
     "test:day5:integration": "node scripts/testDay5Integration.js",
     "test:review:integration": "node scripts/testReviewIntegration.js",
+    "test:atlas:integration": "node scripts/testAtlasDemoIntegration.js",
     "test": "node --test"
   },
   "keywords": [],
