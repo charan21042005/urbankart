@@ -94,7 +94,7 @@ export default function ProductDetailPage() {
           <h1 id="product-title">{product.name || 'Untitled product'}</h1>
           <p className="product-detail__price">{formatPrice(product.price)} <span>Price as supplied by catalogue</span></p>
           {product.description && <p className="product-detail__description">{product.description}</p>}
-          {Number.isInteger(product.stock) && <p className={`stock-note${product.stock > 0 ? ' stock-note--available' : ''}`}>{product.stock > 0 ? 'Available' : 'Currently unavailable'}</p>}
+          {Number.isInteger(product.stock) && <><p className={`stock-note${product.stock > 0 ? ' stock-note--available' : ''}`}>{product.stock > 0 ? 'Available for demo checkout' : 'Currently unavailable'}</p><p className="catalog-note">Stock in this academic demo is synthetic and does not represent retailer inventory.</p></>}
           {Array.isArray(product.attributes) && product.attributes.length > 0 && <dl className="attribute-list">{product.attributes.filter((item) => item && typeof item.key === 'string' && typeof item.value === 'string').map((item, index) => <div key={`${item.key}-${index}`}><dt>{item.key}</dt><dd>{item.value}</dd></div>)}</dl>}
           {auth.isAuthenticated ? <div className="add-controls">
             {Number.isInteger(product.stock) && product.stock > 0 && <label>Quantity <input aria-label="Quantity" type="number" min="1" max={product.stock} step="1" value={quantity} onChange={(event) => setQuantity(Math.min(product.stock, Math.max(1, Math.floor(Number(event.target.value) || 1))))} /></label>}

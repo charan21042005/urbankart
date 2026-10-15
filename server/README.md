@@ -99,7 +99,7 @@ npm.cmd run import:products -- --dry-run
 npm.cmd run import:products -- --import --stock-default 0 --confirm-local-db urbankart_local
 ```
 
-Historical import evidence before 2026-10-14 described a separate task-owned local database. The current acceptance import and actual API count are recorded in [catalog recovery evidence](../docs/evidence/final-catalog-recovery-2026-10-14.json). The latest dry run parsed 20,000 rows: 19,159 valid normalized products and 841 rejects; a guarded import inserted 19,159 into `urbankart_acceptance_20261014`, and a repeat import matched all rows without adding duplicates. The active API serves 19,165 records including six preserved synthetic demo products. Imported stock is 0 because inventory is absent from the source. Price values remain currency-unspecified.
+Historical import evidence before 2026-10-14 described a separate task-owned local database. The acceptance import and original API count are recorded in [catalog recovery evidence](../docs/evidence/final-catalog-recovery-2026-10-14.json). The dry run parsed 20,000 rows: 19,159 valid normalized products and 841 rejects; a guarded import inserted 19,159 into `urbankart_acceptance_20261014`, and a repeat import matched all rows without adding duplicates. On 2026-10-15, the active local demo assigned 10 units of synthetic stock to each imported product so checkout can be demonstrated. The source has no inventory field, so these quantities are not retailer inventory. The active API serves 19,165 records including six preserved synthetic demo products. Price values remain currency-unspecified.
 
 ### Guarded local administrator setup
 

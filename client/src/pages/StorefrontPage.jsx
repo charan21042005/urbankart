@@ -109,7 +109,7 @@ export default function StorefrontPage() {
           </select></label>
           {(search || category) && <button className="filter-clear" type="button" onClick={clearFilters}>Clear filters</button>}
         </form>
-        <p className="catalog-note">Purchasable items appear first. Imported catalogue rows have no inventory in their source data, so they remain browse-only until an administrator assigns stock.</p>
+        <p className="catalog-note">This academic demo uses synthetic stock for checkout testing. Imported product records were assigned 10 demo units each; these quantities are not retailer inventory or a claim of real-world availability.</p>
 
         {state.status === 'loading' && <div className="product-grid" aria-label="Loading products" aria-busy="true">{Array.from({ length: 8 }, (_, index) => <div className="product-skeleton" key={index}><span /><i /><i /></div>)}</div>}
         {state.status === 'error' && <section className="state-panel" role="alert"><p className="eyebrow">Catalogue unavailable</p><h2>We couldn't reach the collection.</h2><p>{state.error?.message || 'Please check your connection and try again.'}</p><button className="button button--dark" type="button" onClick={() => { const controller = new AbortController(); void load(controller.signal); }}>Try again</button></section>}
