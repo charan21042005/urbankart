@@ -46,7 +46,7 @@ describe('AdminDashboard', () => {
   it('shows a useful loading state before analytics are returned', async () => {
     let finish;
     getAdminDashboard.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-    render(<AdminDashboard />);
+    render(<MemoryRouter><AdminDashboard /></MemoryRouter>);
     await openAnalytics();
     expect(screen.getByText(/Loading analytics/)).toBeTruthy();
     finish({ ...sample, hasOrders: false, revenueByCategory: [], topProducts: [], orderStatusBreakdown: [] });

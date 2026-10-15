@@ -110,7 +110,7 @@ export default function AdminDashboard() {
   const analytics = <>
     {state.status === 'loading' && <div className="dashboard-message" role="status" aria-busy="true"><h2>Loading analytics…</h2><p>Summarizing order records in MongoDB.</p></div>}
     {state.status === 'error' && <div className="dashboard-message" role="alert"><h2>Analytics could not be loaded.</h2><p>{state.error?.message || 'The dashboard service is temporarily unavailable.'}</p><button className="button button--dark" type="button" onClick={() => setAttempt((current) => current + 1)}>Retry analytics</button></div>}
-    {state.status === 'ready' && !hasOrders && <div className="dashboard-message" role="status"><h2>No orders to summarize yet.</h2><p>Dashboard charts will appear when the orders collection has records.</p></div>}
+    {state.status === 'ready' && !hasOrders && <div className="dashboard-message" role="status"><h2>No orders to summarize yet.</h2><p>Dashboard charts appear when customers complete checkout. Create a customer account, choose an in-stock item, and place a local demo order.</p><Link className="button" to="/">Open storefront</Link></div>}
     {state.status === 'ready' && hasOrders && <><DashboardCharts data={state.data} /><p className="dashboard-footnote">Revenue uses historical item prices and quantities for completed, shipped and delivered orders. Category names come from current product records; deleted or missing products are Unattributed.</p></>}
   </>;
 
