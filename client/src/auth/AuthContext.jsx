@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { login as loginRequest, register as registerRequest } from '../api/authApi.js';
+import { updateMyProfile } from '../api/userApi.js';
 import { clearAccessToken, getTokenRevision, setAccessToken } from '../api/tokenStore.js';
 import { subscribeToSessionInvalidation } from '../api/sessionEvents.js';
 
@@ -58,6 +59,11 @@ export function AuthProvider({ children }) {
     clearAccessToken();
     setAuth({ status: 'unauthenticated', user: null, error: null, sessionRevision: getTokenRevision() });
   }, []);
+  const updateProfile = useCallback(async (name) => {
+    const updated = await updateMyProfile(name);
+    setAuth((current) => current.user ? { ...current, user: { ...current.user, name: updated.name } } : current);
+    return updated;
+  }, []);
   const clearError = useCallback(() => setAuth((current) => ({ ...current, error: null })), []);
 
   const value = useMemo(() => ({
@@ -65,8 +71,8 @@ export function AuthProvider({ children }) {
     isAuthenticated: auth.status === 'authenticated' && Boolean(auth.user),
     isInitializing: auth.status === 'initializing',
     isSubmitting: auth.status === 'submitting',
-    login, register, logout, clearError
-  }), [auth, login, register, logout, clearError]);
+    login, register, logout, clearError, updateProfile
+  }), [auth, login, register, logout, clearError, updateProfile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

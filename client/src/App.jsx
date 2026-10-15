@@ -8,6 +8,7 @@ import AuthPage from './pages/AuthPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import CheckoutPage from './pages/CheckoutPage.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import AccountPage from './pages/AccountPage.jsx';
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/cart" element={<CartPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/account" element={<AccountPage />} />
           <Route path="/login" element={<AuthPage mode="login" />} />
           <Route path="/register" element={<AuthPage mode="register" />} />
           <Route path="*" element={<NotFoundPage />} />

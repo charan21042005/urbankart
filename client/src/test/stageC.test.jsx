@@ -12,6 +12,7 @@ import { login, register } from '../api/authApi.js';
 
 vi.mock('../api/productApi.js', () => ({ getCategories: vi.fn(), getProduct: vi.fn(), getProducts: vi.fn(), getRecommendations: vi.fn() }));
 vi.mock('../api/authApi.js', () => ({ login: vi.fn(), register: vi.fn() }));
+vi.mock('../api/reviewApi.js', () => ({ getProductReviews: vi.fn().mockResolvedValue([]), createProductReview: vi.fn() }));
 vi.mock('../api/cartApi.js', () => ({
   getCart: vi.fn(), addCartItem: vi.fn(), setCartItemQuantity: vi.fn(), removeCartItem: vi.fn(), clearCart: vi.fn()
 }));

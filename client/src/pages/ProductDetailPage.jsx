@@ -7,6 +7,7 @@ import PageContainer from '../components/layout/PageContainer.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { useCart } from '../cart/CartContext.jsx';
 import RecommendationSection from '../components/catalog/RecommendationSection.jsx';
+import { createProductReview, getProductReviews } from '../api/reviewApi.js';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
@@ -17,6 +18,12 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [feedback, setFeedback] = useState('');
   const [retryCount, setRetryCount] = useState(0);
+  const [reviewAttempt, setReviewAttempt] = useState(0);
+  const [reviews, setReviews] = useState({ status: 'loading', items: [], error: '' });
+  const [reviewRating, setReviewRating] = useState('5');
+  const [reviewText, setReviewText] = useState('');
+  const [reviewMessage, setReviewMessage] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
   // Fetch the route's product from the API; abort on navigation and retry on request.
   useEffect(() => {
@@ -31,6 +38,15 @@ export default function ProductDetailPage() {
     });
     return () => controller.abort();
   }, [id, retryCount]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setReviews({ status: 'loading', items: [], error: '' });
+    getProductReviews(id, { signal: controller.signal })
+      .then((items) => { if (!controller.signal.aborted) setReviews({ status: 'ready', items, error: '' }); })
+      .catch((error) => { if (!controller.signal.aborted) setReviews({ status: 'error', items: [], error: error.message }); });
+    return () => controller.abort();
+  }, [id, reviewAttempt]);
 
   // Keep the document title aligned with the currently loaded product.
   useEffect(() => { document.title = state.product?.name ? `${state.product.name} | UrbanKart` : 'Product | UrbanKart'; }, [state.product]);
@@ -47,6 +63,21 @@ export default function ProductDetailPage() {
   const confirmCart = async () => {
     const result = await cart.refresh();
     if (result) setFeedback('Your cart has been refreshed. Review its contents before making another change.');
+  };
+
+  const submitReview = async (event) => {
+    event.preventDefault();
+    setReviewSubmitting(true);
+    setReviewMessage('');
+    try {
+      await createProductReview({ productId: id, rating: Number(reviewRating), text: reviewText });
+      setReviewText('');
+      setReviewRating('5');
+      setReviewMessage('Your review was submitted.');
+      setReviewAttempt((value) => value + 1);
+      setRetryCount((value) => value + 1);
+    } catch (error) { setReviewMessage(error.message); }
+    finally { setReviewSubmitting(false); }
   };
 
   if (state.status === 'loading') return <PageContainer className="route-state" aria-busy="true"><p className="eyebrow">Product detail</p><h1>Loading item…</h1></PageContainer>;
@@ -73,6 +104,16 @@ export default function ProductDetailPage() {
           {cart.mutationError && !feedback && <p className="form-error" role="alert">{cart.mutationError.message}</p>}
         </section>
       </div>
+      <section className="product-reviews" aria-labelledby="product-reviews-title">
+        <div className="product-reviews__heading"><div><p className="eyebrow">Customer notes</p><h2 id="product-reviews-title">Reviews</h2></div>
+          <p>{product.ratingCount > 0 ? `${product.ratingAvg.toFixed(1)} / 5 · ${product.ratingCount} rating${product.ratingCount === 1 ? '' : 's'}` : 'No ratings yet'}</p></div>
+        {reviews.status === 'loading' && <p role="status" aria-busy="true">Loading reviews…</p>}
+        {reviews.status === 'error' && <div role="alert"><p>{reviews.error}</p><button type="button" className="button" onClick={() => setReviewAttempt((value) => value + 1)}>Try again</button></div>}
+        {reviews.status === 'ready' && !reviews.items.length && <p className="review-empty">No reviews yet. You can be the first to share a rating.</p>}
+        {reviews.status === 'ready' && reviews.items.length > 0 && <ul className="product-review-list">{reviews.items.map((review) => <li key={review._id}><strong>{review.rating} / 5</strong><time dateTime={review.createdAt}>{new Date(review.createdAt).toLocaleDateString()}</time>{review.text && <p>{review.text}</p>}</li>)}</ul>}
+        {auth.isAuthenticated ? <form className="product-review-form" onSubmit={submitReview}><h3>Write a review</h3><label>Rating<select value={reviewRating} onChange={(event) => setReviewRating(event.target.value)}>{[5,4,3,2,1].map((rating)=><option key={rating} value={rating}>{rating} / 5</option>)}</select></label><label>Your note<textarea value={reviewText} maxLength="4000" rows="4" onChange={(event) => setReviewText(event.target.value)} placeholder="What should other customers know?" /></label><button type="submit" className="button button--dark" disabled={reviewSubmitting}>{reviewSubmitting ? 'Submitting…' : 'Submit review'}</button>{reviewMessage && <p role="status">{reviewMessage}</p>}</form>
+          : <p><Link to="/login" state={{ from: `${location.pathname}${location.search}` }}>Sign in</Link> to write a review.</p>}
+      </section>
       <RecommendationSection key={product._id} productId={product._id} />
     </PageContainer>
   );

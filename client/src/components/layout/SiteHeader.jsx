@@ -16,7 +16,7 @@ export default function SiteHeader() {
           <NavLink to="/cart" className="cart-nav">Cart <span aria-label={`${cart.itemCount} items`}>{cart.itemCount}</span></NavLink>
           {auth.isAuthenticated && auth.user?.role === 'admin' && <NavLink to="/admin">Admin Dashboard</NavLink>}
         </nav>
-        <div className="header-actions">{auth.isAuthenticated ? <><span className="header-user">{auth.user.name}</span><button type="button" className="header-action" onClick={auth.logout}>Sign out</button></> : <><Link className="header-action" to="/login">Sign in</Link><Link className="header-action header-action--join" to="/register">Join</Link></>}</div>
+        <div className="header-actions">{auth.isAuthenticated ? <><Link className="header-action" to="/account">My account</Link><span className="header-user">{auth.user.name}</span><button type="button" className="header-action" onClick={auth.logout}>Sign out</button></> : <><Link className="header-action" to="/login">Sign in</Link><Link className="header-action header-action--join" to="/register">Join</Link></>}</div>
       </PageContainer>
     </header>
   );

@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { httpClient } from '../api/httpClient.js';
 import { getAdminDashboard } from '../api/adminApi.js';
 import { getRecommendations } from '../api/productApi.js';
+import { createProductReview, getProductReviews } from '../api/reviewApi.js';
 
-vi.mock('../api/httpClient.js', () => ({ httpClient: { get: vi.fn() } }));
+vi.mock('../api/httpClient.js', () => ({ httpClient: { get: vi.fn(), post: vi.fn() } }));
 
 afterEach(() => vi.clearAllMocks());
 
@@ -34,5 +35,16 @@ describe('Day 5 API clients', () => {
     expect(httpClient.get).toHaveBeenCalledWith('/admin/dashboard', { signal });
     httpClient.get.mockResolvedValue({ data: { status: 'success', revenueByCategory: [] } });
     await expect(getAdminDashboard()).rejects.toThrow(/unexpected response/);
+  });
+
+  it('loads public reviews and submits a review through the authenticated API client', async () => {
+    const signal = new AbortController().signal;
+    const review = { _id: 'review-1', productId: 'product-1', rating: 5, text: 'Useful item' };
+    httpClient.get.mockResolvedValue({ data: { status: 'success', reviews: [review] } });
+    expect(await getProductReviews('product-1', { signal })).toEqual([review]);
+    expect(httpClient.get).toHaveBeenCalledWith('/reviews/product/product-1', { signal });
+    httpClient.post.mockResolvedValue({ data: { status: 'success', review } });
+    expect(await createProductReview({ productId: 'product-1', rating: 5, text: 'Useful item' })).toEqual(review);
+    expect(httpClient.post).toHaveBeenCalledWith('/reviews', { productId: 'product-1', rating: 5, text: 'Useful item' });
   });
 });
