@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import AdminDashboard from '../pages/AdminDashboard.jsx';
 import { useAuth } from '../auth/AuthContext.jsx';
-import { getAdminDashboard, getAdminOverview } from '../api/adminApi.js';
+import { getAdminDashboard, getAdminOverview, getAdminUsers, getAdminOrders, getAdminReviews, getAdminProducts } from '../api/adminApi.js';
 
 vi.mock('../auth/AuthContext.jsx', () => ({ useAuth: vi.fn() }));
 vi.mock('../api/adminApi.js', () => ({
@@ -25,11 +25,43 @@ beforeEach(() => {
   useAuth.mockReturnValue({ isAuthenticated: true, user: { role: 'admin' } });
   getAdminDashboard.mockResolvedValue(sample);
   getAdminOverview.mockResolvedValue({ productCount: 6, categoryCounts: [], activeUserCount: 0, orderCount: 0, reviewCount: 0, averageReviewRating: null, activeCartCount: 0, cartItemCount: 0, orderStatusBreakdown: [] });
+  getAdminUsers.mockResolvedValue({ users: [], total: 0, totalPages: 0 });
+  getAdminOrders.mockResolvedValue({ orders: [], total: 0, totalPages: 0 });
+  getAdminReviews.mockResolvedValue({ reviews: [], total: 0, totalPages: 0 });
+  getAdminProducts.mockResolvedValue({ products: [], pagination: { totalCount: 0, page: 1, pageSize: 20, totalPages: 0 } });
 });
 
-const openAnalytics = () => fireEvent.click(screen.getByRole('button', { name: 'Analytics' }));
+const openAnalytics = () => fireEvent.click(screen.getByRole('link', { name: 'Analytics' }));
 
 describe('AdminDashboard', () => {
+  it('opens each management section at its own route and loads that section data', async () => {
+    renderDashboard();
+    expect(await screen.findByRole('heading', { name: 'Admin Dashboard' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Products' }));
+    expect(await screen.findByRole('heading', { name: 'Products' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Create catalogue product' })).toBeTruthy();
+    expect(getAdminProducts).toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: 'Products' }).getAttribute('aria-current')).toBe('page');
+
+    fireEvent.click(screen.getByRole('link', { name: 'Users & carts' }));
+    expect(await screen.findByRole('heading', { name: 'Users & carts' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'No matching customers' })).toBeTruthy();
+    expect(getAdminUsers).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Orders' }));
+    expect(await screen.findByRole('heading', { name: 'No orders yet' })).toBeTruthy();
+    expect(getAdminOrders).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Reviews' }));
+    expect(await screen.findByRole('heading', { name: 'No reviews yet' })).toBeTruthy();
+    expect(getAdminReviews).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Analytics' }));
+    expect(await screen.findByTestId('revenue-chart')).toBeTruthy();
+    expect(getAdminDashboard).toHaveBeenCalled();
+  });
+
   it('renders API-derived revenue, product and status charts for administrators', async () => {
     renderDashboard();
     expect(await screen.findByRole('heading', { name: 'Admin Dashboard' })).toBeTruthy();

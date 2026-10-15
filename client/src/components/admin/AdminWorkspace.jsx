@@ -5,7 +5,14 @@ import {
   getAdminProducts, getAdminReviews, getAdminUser, getAdminUserCart, getAdminUsers, updateAdminProduct
 } from '../../api/adminApi.js';
 
-const SECTIONS = ['Overview', 'Users & carts', 'Orders', 'Products', 'Reviews', 'Analytics'];
+const SECTIONS = [
+  { label: 'Overview', path: '/admin' },
+  { label: 'Users & carts', path: '/admin/customers' },
+  { label: 'Orders', path: '/admin/orders' },
+  { label: 'Products', path: '/admin/products' },
+  { label: 'Reviews', path: '/admin/reviews' },
+  { label: 'Analytics', path: '/admin/analytics' }
+];
 const EMPTY_PRODUCT = { name: '', description: '', category: '', price: '', stock: '0' };
 
 function StateMessage({ state, retry }) {
@@ -34,7 +41,7 @@ function ProductFields({ value, onChange }) {
   </>;
 }
 
-export default function AdminWorkspace({ section, onSectionChange, analytics }) {
+export default function AdminWorkspace({ section, analytics }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -50,18 +57,19 @@ export default function AdminWorkspace({ section, onSectionChange, analytics }) 
   useEffect(() => {
     if (section === 'Analytics') return undefined;
     const controller = new AbortController();
-    setState({ status: 'loading', data: null, error: '' });
+    setState({ status: 'loading', data: null, error: '', section });
     const request = section === 'Overview' ? getAdminOverview({ signal: controller.signal })
       : section === 'Users & carts' ? getAdminUsers({ page, search, signal: controller.signal })
         : section === 'Orders' ? getAdminOrders({ page, signal: controller.signal })
           : section === 'Products' ? getAdminProducts({ page, search, signal: controller.signal })
             : getAdminReviews({ page, signal: controller.signal });
-    request.then((data) => { if (!controller.signal.aborted) setState({ status: 'ready', data, error: '' }); })
-      .catch((error) => { if (!controller.signal.aborted) setState({ status: 'error', data: null, error: error.message }); });
+    request.then((data) => { if (!controller.signal.aborted) setState({ status: 'ready', data, error: '', section }); })
+      .catch((error) => { if (!controller.signal.aborted) setState({ status: 'error', data: null, error: error.message, section }); });
     return () => controller.abort();
   }, [section, page, search, attempt]);
 
   const refresh = () => setAttempt((value) => value + 1);
+  const sectionState = state.section === section ? state : { status: 'loading', data: null, error: '' };
   const run = async (operation, success) => {
     setMessage('');
     try { await operation(); setMessage(success); refresh(); return true; }
@@ -69,8 +77,8 @@ export default function AdminWorkspace({ section, onSectionChange, analytics }) 
   };
 
   let content = null;
-  if (section === 'Overview' && state.status === 'ready') {
-    const metrics = state.data;
+  if (section === 'Overview' && sectionState.status === 'ready') {
+    const metrics = sectionState.data;
     content = <>
       <div className="admin-metrics">{[
         ['Products', metrics.productCount], ['Active accounts', metrics.activeUserCount], ['Orders', metrics.orderCount],
@@ -80,28 +88,28 @@ export default function AdminWorkspace({ section, onSectionChange, analytics }) 
       <h3>Largest catalogue categories</h3><ul className="admin-compact-list">{metrics.categoryCounts.map((item) => <li key={item.category}>{item.category}<span>{item.count.toLocaleString()}</span></li>)}</ul>
       <h3>Order statuses</h3><ul className="admin-compact-list">{metrics.orderStatusBreakdown.length ? metrics.orderStatusBreakdown.map((item) => <li key={item.status}>{item.status}<span>{item.count}</span></li>) : <li>No order records yet.</li>}</ul>
     </>;
-  } else if (section === 'Users & carts' && state.status === 'ready') {
+  } else if (section === 'Users & carts' && sectionState.status === 'ready') {
     content = <>
-      <p>{state.data.total} customer account{state.data.total === 1 ? '' : 's'}</p>
+      <p>{sectionState.data.total} customer account{sectionState.data.total === 1 ? '' : 's'}</p>
       <label className="admin-search">Search customers<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name or email" /></label>
-      {state.data.users.length > 0 ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Registered</th><th>Details</th><th>Current cart</th></tr></thead><tbody>
-        {state.data.users.map((user) => <tr key={user._id}><td>{user.name}</td><td>{user.email}</td><td>{user.role}</td><td>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Date unavailable'}</td>
+      {sectionState.data.users.length > 0 ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Registered</th><th>Details</th><th>Current cart</th></tr></thead><tbody>
+        {sectionState.data.users.map((user) => <tr key={user._id}><td>{user.name}</td><td>{user.email}</td><td>{user.role}</td><td>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'Date unavailable'}</td>
           <td><button type="button" className="text-link" onClick={() => getAdminUser(user._id).then(setSelectedUser).catch((error) => setMessage(error.message))}>Inspect account</button></td>
           <td><button type="button" className="text-link" onClick={() => getAdminUserCart(user._id).then(setSelectedCart).catch((error) => setMessage(error.message))}>Inspect cart</button></td></tr>)}
       </tbody></table></div> : <div className="admin-empty"><h3>No matching customers</h3><p>Try a different name or email search.</p><button type="button" className="button" onClick={() => setSearch('')}>Clear search</button></div>}
-      <Pager page={page} totalPages={state.data.totalPages} onChange={setPage} />
+      <Pager page={page} totalPages={sectionState.data.totalPages} onChange={setPage} />
       {selectedUser && <section className="admin-detail"><h3>Account details</h3><p>{selectedUser.name} · {selectedUser.email} · {selectedUser.role} · {selectedUser.isActive === false ? 'inactive' : 'active'}</p><p>Registered: {selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleString() : 'Date unavailable'}</p></section>}
       {selectedCart && <section className="admin-detail"><h3>Current cart — {selectedCart.user.name} ({selectedCart.user.email})</h3>{selectedCart.cart.items.length ? <ul>{selectedCart.cart.items.map((item, index) => <li key={`${item.product?._id}-${index}`}>{item.product?.name || 'Unavailable product'} · qty {item.quantity} · {item.currentLineTotal === null ? 'price unavailable' : item.currentLineTotal.toFixed(2)}</li>)}</ul> : <p>This cart is empty.</p>}<p>Current-price total: {selectedCart.cart.currentTotal.toFixed(2)} (catalogue currency unspecified)</p></section>}
     </>;
-  } else if (section === 'Orders' && state.status === 'ready') {
+  } else if (section === 'Orders' && sectionState.status === 'ready') {
     content = <>
-      {state.data.orders.length > 0 ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Status</th><th>Total</th><th>Items</th></tr></thead><tbody>{state.data.orders.map((order) => <tr key={order._id}>
+      {sectionState.data.orders.length > 0 ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Order</th><th>Customer</th><th>Date</th><th>Status</th><th>Total</th><th>Items</th></tr></thead><tbody>{sectionState.data.orders.map((order) => <tr key={order._id}>
         <td><button type="button" className="text-link" onClick={() => getAdminOrder(order._id).then(setSelectedOrder).catch((error) => setMessage(error.message))}>{order._id}</button></td><td>{order.customerId?.name || order.customerId?.email || 'Unavailable customer'}</td><td>{new Date(order.orderDate).toLocaleString()}</td><td>{order.status}</td><td>{order.totalAmount}</td><td>{order.items.length}</td>
       </tr>)}</tbody></table></div> : <div className="admin-empty"><h3>No orders yet</h3><p>Orders appear here after a customer completes checkout. Choose an in-stock item for the local demo.</p><Link className="button" to="/">Open storefront</Link></div>}
-      <Pager page={page} totalPages={state.data.totalPages} onChange={setPage} />
+      <Pager page={page} totalPages={sectionState.data.totalPages} onChange={setPage} />
       {selectedOrder && <section className="admin-detail"><h3>Order detail · {selectedOrder._id}</h3><p>{selectedOrder.customerId?.email || 'Customer unavailable'} · {selectedOrder.status} · total {selectedOrder.totalAmount}</p><ul>{selectedOrder.items.map((item, index) => <li key={`${item.productId}-${index}`}>{item.nameAtPurchase} · {item.qty} × {item.priceAtPurchase}</li>)}</ul></section>}
     </>;
-  } else if (section === 'Products' && state.status === 'ready') {
+  } else if (section === 'Products' && sectionState.status === 'ready') {
     content = <>
       <form className="admin-product-form" onSubmit={(event) => { event.preventDefault(); const body = { ...form, price: Number(form.price), stock: Number(form.stock) }; void run(() => createAdminProduct(body), 'Product created.').then((ok) => { if (ok) setForm(EMPTY_PRODUCT); }); }}>
         <h3>Create catalogue product</h3><ProductFields value={form} onChange={setForm} /><button className="button button--dark">Create product</button>
@@ -112,21 +120,21 @@ export default function AdminWorkspace({ section, onSectionChange, analytics }) 
         <p className="admin-form-note">Changing stock assigns local demo inventory; it does not represent retailer inventory.</p>
       </form>}
       <label className="admin-search">Search products<input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Product name or description" /></label>
-      {state.data.products.length > 0 ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Action</th></tr></thead><tbody>{state.data.products.map((product) => <tr key={product._id}>
+      {sectionState.data.products.length > 0 ? <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Action</th></tr></thead><tbody>{sectionState.data.products.map((product) => <tr key={product._id}>
         <td>{product.name}</td><td>{product.category}</td><td>{product.price}</td><td>{product.stock}</td><td><button type="button" className="text-link" onClick={() => setEditingProduct({ ...product, description: product.description || '', price: String(product.price), stock: String(product.stock) })}>Edit product</button> <button type="button" className="text-link" onClick={() => { if (window.confirm(`Delete “${product.name}” from the catalogue?`)) void run(() => deleteAdminProduct(product._id), 'Product deleted.'); }}>Delete</button></td>
       </tr>)}</tbody></table></div> : <div className="admin-empty"><h3>No matching products</h3><p>Try another search or add a catalogue item using the form above.</p></div>}
-      <Pager page={page} totalPages={state.data.pagination.totalPages} onChange={setPage} />
+      <Pager page={page} totalPages={sectionState.data.pagination.totalPages} onChange={setPage} />
     </>;
-  } else if (section === 'Reviews' && state.status === 'ready') {
-    content = state.data.reviews.length > 0 ? <>
-      <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Product</th><th>Customer</th><th>Rating</th><th>Review</th><th>Date</th></tr></thead><tbody>{state.data.reviews.map((review) => <tr key={review._id}>
+  } else if (section === 'Reviews' && sectionState.status === 'ready') {
+    content = sectionState.data.reviews.length > 0 ? <>
+      <div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Product</th><th>Customer</th><th>Rating</th><th>Review</th><th>Date</th></tr></thead><tbody>{sectionState.data.reviews.map((review) => <tr key={review._id}>
         <td>{review.productId?.name || 'Unavailable product'}</td><td>{review.userId?.name || review.userId?.email || 'Unavailable user'}</td><td>{review.rating}/5</td><td>{review.text || 'No written comment'}</td><td>{new Date(review.createdAt).toLocaleDateString()}</td>
       </tr>)}</tbody></table></div><Pager page={page} totalPages={state.data.totalPages} onChange={setPage} />
     </> : <div className="admin-empty"><h3>No reviews yet</h3><p>Customer reviews appear here after they submit a rating on a product page.</p><Link className="button" to="/">Open storefront</Link></div>;
   } else if (section === 'Analytics') content = analytics;
 
   return <section className="admin-workspace" aria-label="Admin dashboard sections">
-    <nav className="admin-tabs" aria-label="Admin sections">{SECTIONS.map((name) => <button key={name} type="button" className={section === name ? 'is-active' : ''} aria-current={section === name ? 'page' : undefined} onClick={() => onSectionChange(name)}>{name}</button>)}</nav>
-    <div className="admin-workspace__body">{section !== 'Analytics' && <StateMessage state={state} retry={refresh} />}{message && <p role="status">{message}</p>}{content}</div>
+    <nav className="admin-tabs" aria-label="Admin sections">{SECTIONS.map(({ label, path }) => <Link key={path} className={section === label ? 'is-active' : ''} aria-current={section === label ? 'page' : undefined} to={path}>{label}</Link>)}</nav>
+    <div className="admin-workspace__body">{section !== 'Analytics' && <StateMessage state={sectionState} retry={refresh} />}{message && <p role="status">{message}</p>}{content}</div>
   </section>;
 }

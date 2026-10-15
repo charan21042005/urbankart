@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, Navigate, useLocation } from 'react-router';
 import {
   Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis
@@ -74,13 +74,23 @@ function DashboardCharts({ data }) {
 
 export default function AdminDashboard() {
   const auth = useAuth();
+  const location = useLocation();
+  const routeSections = {
+    customers: 'Users & carts',
+    orders: 'Orders',
+    products: 'Products',
+    reviews: 'Reviews',
+    analytics: 'Analytics'
+  };
+  const slug = location.pathname.replace(/^\/admin\/?/, '').split('/')[0];
+  const section = slug ? routeSections[slug] : 'Overview';
+  const validRoute = !slug || Boolean(section);
   const isAdmin = auth.isAuthenticated && auth.user?.role === 'admin';
   const [attempt, setAttempt] = useState(0);
-  const [section, setSection] = useState('Overview');
   const [state, setState] = useState({ status: 'loading', data: null, error: null });
 
   useEffect(() => {
-    if (!isAdmin) return undefined;
+    if (!isAdmin || section !== 'Analytics') return undefined;
     const controller = new AbortController();
     setState({ status: 'loading', data: null, error: null });
     getAdminDashboard({ signal: controller.signal }).then((data) => {
@@ -89,17 +99,19 @@ export default function AdminDashboard() {
       if (!controller.signal.aborted) setState({ status: 'error', data: null, error });
     });
     return () => controller.abort();
-  }, [isAdmin, attempt]);
+  }, [isAdmin, section, attempt]);
 
-  useEffect(() => { document.title = 'Admin analytics | UrbanKart'; }, []);
+  useEffect(() => { document.title = `${section || 'Admin'} | UrbanKart`; }, [section]);
 
   const hasOrders = useMemo(() => Boolean(state.data?.hasOrders
     ?? state.data?.orderStatusBreakdown?.some((item) => item.count > 0)), [state.data]);
 
+  if (!validRoute) return <Navigate to="/admin" replace />;
+
   if (!auth.isAuthenticated) return <PageContainer className="admin-page">
     <p className="eyebrow">UrbanKart administration</p><h1>Sign in to continue.</h1>
     <p>Dashboard access is available to administrator accounts.</p>
-    <Link className="button button--dark" to="/login" state={{ from: '/admin' }}>Sign in</Link>
+    <Link className="button button--dark" to="/login" state={{ from: location.pathname }}>Sign in</Link>
   </PageContainer>;
 
   if (!isAdmin) return <PageContainer className="admin-page" role="status">
@@ -116,9 +128,9 @@ export default function AdminDashboard() {
 
   return <PageContainer className="admin-page">
     <div className="catalog-heading admin-page__heading">
-      <div><p className="eyebrow"><span className="eyebrow__rule" /> Store management</p><h1>Admin Dashboard</h1></div>
+      <div><p className="eyebrow"><span className="eyebrow__rule" /> Store management</p><h1>{section === 'Overview' ? 'Admin Dashboard' : section}</h1>{section !== 'Overview' && <p className="admin-page__description">Manage your store {section.toLowerCase()} with live data from MongoDB.</p>}</div>
       {section === 'Analytics' && state.status === 'ready' && <button className="button" type="button" onClick={() => setAttempt((current) => current + 1)}>Refresh analytics</button>}
     </div>
-    <AdminWorkspace section={section} onSectionChange={setSection} analytics={analytics}/>
+    <AdminWorkspace section={section} analytics={analytics}/>
   </PageContainer>;
 }
