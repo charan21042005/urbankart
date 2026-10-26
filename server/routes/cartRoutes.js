@@ -1,3 +1,4 @@
+// Cart endpoints manage the signed-in user's basket and transactional checkout.
 const express = require('express');
 const mongoose = require('mongoose');
 const crypto = require('node:crypto');
@@ -8,30 +9,38 @@ const Product = require('../models/Product');
 const { authenticate, loadCurrentUser } = require('../middleware/auth');
 
 const router = express.Router();
+// Protect all cart and checkout operations with the current authenticated account.
 router.use(authenticate, loadCurrentUser);
+// Keep quantities within MongoDB's signed 32-bit integer range.
 const MAX_QUANTITY = 2_147_483_647;
 
+// Accept only safe, positive integer quantities.
 function isPositiveInteger(value) {
   return Number.isSafeInteger(value) && value > 0 && value <= MAX_QUANTITY;
 }
 
+// Compare IDs consistently whether Mongoose populated them or not.
 function sameId(left, right) {
   return String(left) === String(right);
 }
 
+// Find a cart line by product ID for both populated and unpopulated cart records.
 function findCartProduct(cart, productId) {
   return cart.items.find((item) => sameId(item.productId?._id || item.productId, productId));
 }
 
+// Check that a supplied product identifier is a valid MongoDB ObjectId string.
 function validateProductId(value) {
   return typeof value === 'string' && mongoose.isValidObjectId(value);
 }
 
+// Restrict idempotency keys to bounded, URL-safe characters.
 function validIdempotencyKey(value) {
   return typeof value === 'string' && value.length >= 16 && value.length <= 128
     && /^[A-Za-z0-9._~-]+$/.test(value);
 }
 
+// Hash a canonical product-and-quantity list to detect cart changes during checkout.
 function cartFingerprint(cart) {
   const quantities = new Map();
   for (const item of cart?.items || []) {
@@ -42,15 +51,18 @@ function cartFingerprint(cart) {
   return crypto.createHash('sha256').update(JSON.stringify(intent)).digest('hex');
 }
 
+// Look up a checkout attempt only within the requesting user's account.
 async function findOperation(userId, key) {
   return CheckoutOperation.findOne({ userId, key }).populate('orderId').lean();
 }
 
+// Return the saved order and indicate whether this response replays an earlier checkout.
 function operationResponse(operation, replayed, res) {
   if (!operation?.orderId) return res.status(404).json({ status: 'error', message: 'Checkout result not found.' });
   return res.status(replayed ? 200 : 201).json({ status: 'success', replayed, order: operation.orderId });
 }
 
+// Carry an expected HTTP status through transaction failures for clean API responses.
 class CheckoutError extends Error {
   constructor(status, message) {
     super(message);
@@ -58,6 +70,7 @@ class CheckoutError extends Error {
   }
 }
 
+// Read the authenticated user's cart and populate display and stock fields.
 router.get('/', async (req, res) => {
   try {
     const cart = await Cart.findOne({ userId: req.auth.userId }).populate(
@@ -69,6 +82,7 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Add a product or increase its existing cart quantity after checking inventory.
 router.post('/items', async (req, res) => {
   const { productId, quantity } = req.body || {};
   if (!validateProductId(productId) || !isPositiveInteger(quantity)) {
@@ -76,6 +90,7 @@ router.post('/items', async (req, res) => {
   }
 
   try {
+    // Load product and cart separately, then reject quantities exceeding current stock.
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ status: 'error', message: 'Product not found.' });
     let cart = await Cart.findOne({ userId: req.auth.userId });
@@ -95,6 +110,7 @@ router.post('/items', async (req, res) => {
   }
 });
 
+// Set an existing cart line to a new quantity after validating available stock.
 router.patch('/items/:productId', async (req, res) => {
   const { productId } = req.params;
   const { quantity } = req.body || {};
@@ -122,6 +138,7 @@ router.patch('/items/:productId', async (req, res) => {
   }
 });
 
+// Remove one product from the authenticated user's cart.
 router.delete('/items/:productId', async (req, res) => {
   const { productId } = req.params;
   if (!validateProductId(productId)) {
@@ -143,6 +160,7 @@ router.delete('/items/:productId', async (req, res) => {
   }
 });
 
+// Empty the current user's cart while preserving the cart document.
 router.delete('/', async (req, res) => {
   try {
     const cart = await Cart.findOne({ userId: req.auth.userId });
@@ -155,6 +173,7 @@ router.delete('/', async (req, res) => {
   }
 });
 
+// Retrieve a prior checkout result by its user-scoped idempotency key.
 router.get('/checkout/:key', async (req, res) => {
   const { key } = req.params;
   if (!validIdempotencyKey(key)) {
@@ -169,12 +188,14 @@ router.get('/checkout/:key', async (req, res) => {
   }
 });
 
+// Create one order from the current cart, safely handling retries and concurrent requests.
 router.post('/checkout', async (req, res) => {
   const key = req.get('Idempotency-Key');
   if (!validIdempotencyKey(key)) {
     return res.status(400).json({ status: 'error', message: 'Idempotency-Key must be 16 to 128 letters, numbers, dots, underscores, tildes, or hyphens.' });
   }
 
+  // Capture the cart intent and check whether this key already completed a checkout.
   let fingerprint;
   try {
     const observedCart = await Cart.findOne({ userId: req.auth.userId }).lean();
@@ -193,6 +214,7 @@ router.post('/checkout', async (req, res) => {
     return res.status(503).json({ status: 'error', message: 'Checkout could not be prepared. Check the cart status before retrying.' });
   }
 
+  // A MongoDB transaction keeps stock, order, operation, and cart updates atomic.
   let session;
   try {
     session = await mongoose.startSession();
@@ -204,6 +226,7 @@ router.post('/checkout', async (req, res) => {
         throw new CheckoutError(409, 'Cart changed while checkout was starting. Review it and use a new checkout attempt.');
       }
 
+      // Snapshot purchase-time product details while decrementing stock conditionally.
       const snapshots = [];
       let totalAmount = 0;
       for (const item of cart.items) {
@@ -224,6 +247,7 @@ router.post('/checkout', async (req, res) => {
         totalAmount += product.price * item.quantity;
       }
 
+      // Persist the order and idempotency record in the same transaction.
       const [order] = await Order.create([{
         customerId: req.auth.userId,
         items: snapshots,
@@ -235,6 +259,7 @@ router.post('/checkout', async (req, res) => {
         fingerprint,
         orderId: order._id
       }], { session });
+      // Clear only the cart observed by this transaction; abort if it changed.
       const clearResult = await Cart.updateOne(
         { _id: cart._id, userId: req.auth.userId },
         { $set: { items: [] } },
@@ -270,4 +295,5 @@ router.post('/checkout', async (req, res) => {
   }
 });
 
+// Export the router for mounting under the application's cart API path.
 module.exports = router;

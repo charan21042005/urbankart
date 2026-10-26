@@ -1,3 +1,4 @@
+// Product endpoints serve catalog browsing, recommendations, and admin product changes.
 const express = require('express');
 const mongoose = require('mongoose');
 const Product = require('../models/Product');
@@ -7,11 +8,16 @@ const Review = require('../models/Review');
 const { authenticate, loadCurrentUser, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
+// Bound catalog pages so a client cannot request an unbounded result set.
 const MAX_PAGE_SIZE = 100;
+// Match the maximum positive integer stock value supported by BSON.
 const MAX_BSON_INT32 = 2_147_483_647;
+// Allow-list fields accepted from administrator product create and update requests.
 const PRODUCT_FIELDS = new Set(['name', 'description', 'price', 'stock', 'category', 'attributes', 'tags']);
+// Ignore recommendation records older than this cache freshness window.
 const MAX_RECOMMENDATION_CACHE_AGE_MS = 36 * 60 * 60 * 1000;
 
+// Sanitize optional explanation fields before sending cached recommendation data.
 function normalizeCachedExplanation(item) {
   return {
     sharedTags: Array.isArray(item.sharedTags) ? item.sharedTags.filter((tag) => typeof tag === 'string') : [],
@@ -25,9 +31,11 @@ function normalizeCachedExplanation(item) {
   };
 }
 
+// Prefer fresh precomputed recommendations, then fall back to rated same-category products.
 async function readCachedRecommendations(source, { ProductModel = Product, RecommendationModel = Recommendation, now = Date.now() } = {}) {
   const cache = await RecommendationModel.findOne({ productId: source._id }).lean();
   const computedAt = cache?.computedAt ? new Date(cache.computedAt) : null;
+  // Validate cache time and entries before allowing cached data into the response.
   const cacheIsFresh = computedAt && Number.isFinite(computedAt.getTime())
     && now - computedAt.getTime() <= MAX_RECOMMENDATION_CACHE_AGE_MS;
   const sourceId = String(source._id);
@@ -37,6 +45,7 @@ async function readCachedRecommendations(source, { ProductModel = Product, Recom
       && Number.isFinite(item.score) && item.score >= 0 && item.score <= 1;
   }) : [];
 
+  // Load existing products in one query and discard duplicate, missing, or self references.
   if (cacheIsFresh && cachedItems.length) {
     const uniqueItems = [...new Map(cachedItems.map((item) => [String(item.productId), item])).values()];
     const products = await ProductModel.find({ _id: { $in: uniqueItems.map((item) => item.productId) } }).lean();
@@ -76,6 +85,7 @@ async function readCachedRecommendations(source, { ProductModel = Product, Recom
   };
 }
 
+// Parse a positive integer query value or return null when it is malformed.
 function parsePositiveInteger(value, fallback) {
   if (value === undefined) return fallback;
   if (Array.isArray(value) || !/^\d+$/.test(value)) return null;
@@ -83,6 +93,7 @@ function parsePositiveInteger(value, fallback) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+// Validate product fields and reject values that the API does not support.
 function validateProductPayload(body, { partial = false } = {}) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return 'A product object is required.';
   const keys = Object.keys(body);
@@ -123,6 +134,7 @@ function validateProductPayload(body, { partial = false } = {}) {
   return null;
 }
 
+// Browse products with supported filters and bounded pagination.
 router.get('/', async (req, res) => {
   const page = parsePositiveInteger(req.query.page, 1);
   const requestedLimit = parsePositiveInteger(req.query.limit, 20);
@@ -183,6 +195,7 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Return the distinct categories currently present in the product collection.
 router.get('/categories', async (req, res) => {
   try {
     const categories = await Product.distinct('category');
@@ -193,6 +206,7 @@ router.get('/categories', async (req, res) => {
   }
 });
 
+// Return cached or fallback recommendations for one existing product.
 router.get('/:id/recommendations', async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ status: 'error', message: 'Product ID is invalid.' });
@@ -208,6 +222,7 @@ router.get('/:id/recommendations', async (req, res) => {
   }
 });
 
+// Read one product by ID and include its rating and recommendation details as needed.
 router.get('/:id', async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ status: 'error', message: 'Product ID is invalid.' });
@@ -221,6 +236,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Create a product; authentication middleware restricts this operation to admins.
 router.post('/', authenticate, loadCurrentUser, requireAdmin, async (req, res) => {
   const validationMessage = validateProductPayload(req.body);
   if (validationMessage) return res.status(400).json({ status: 'error', message: validationMessage });
@@ -235,6 +251,7 @@ router.post('/', authenticate, loadCurrentUser, requireAdmin, async (req, res) =
   }
 });
 
+// Apply an allow-listed partial update to an existing product.
 router.patch('/:id', authenticate, loadCurrentUser, requireAdmin, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ status: 'error', message: 'Product ID is invalid.' });
@@ -255,6 +272,7 @@ router.patch('/:id', authenticate, loadCurrentUser, requireAdmin, async (req, re
   }
 });
 
+// Delete a product only when it is not referenced by an active cart or review.
 router.delete('/:id', authenticate, loadCurrentUser, requireAdmin, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ status: 'error', message: 'Product ID is invalid.' });
@@ -275,6 +293,7 @@ router.delete('/:id', authenticate, loadCurrentUser, requireAdmin, async (req, r
   }
 });
 
+// Export the router and helper metadata used by the application and unit tests.
 module.exports = router;
 module.exports.readCachedRecommendations = readCachedRecommendations;
 module.exports.MAX_RECOMMENDATION_CACHE_AGE_MS = MAX_RECOMMENDATION_CACHE_AGE_MS;

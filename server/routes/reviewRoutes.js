@@ -1,3 +1,4 @@
+// Review endpoints expose product feedback and let authenticated users manage their reviews.
 const express = require('express');
 const mongoose = require('mongoose');
 const Review = require('../models/Review');
@@ -5,14 +6,18 @@ const Product = require('../models/Product');
 const { authenticate, loadCurrentUser } = require('../middleware/auth');
 
 const router = express.Router();
+// Only these fields may be submitted when creating or editing review content.
 const REVIEW_FIELDS = new Set(['productId', 'rating', 'text']);
 const UPDATE_FIELDS = new Set(['rating', 'text']);
+// Bound the number of reviews returned by one list request.
 const MAX_PAGE_SIZE = 100;
 
+// Require a non-empty review body within the supported length limit.
 function validText(value) {
   return typeof value === 'string' && value.length <= 4000;
 }
 
+// Validate allowed fields, required values, and rating/text constraints.
 function validateReviewPayload(body, { partial = false } = {}) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return 'A review object is required.';
   const allowed = partial ? UPDATE_FIELDS : REVIEW_FIELDS;
@@ -33,6 +38,7 @@ function validateReviewPayload(body, { partial = false } = {}) {
   return null;
 }
 
+// Parse a positive integer query parameter or use its default value.
 function positiveInteger(value, fallback) {
   if (value === undefined) return fallback;
   if (Array.isArray(value) || !/^\d+$/.test(value)) return null;
@@ -40,6 +46,7 @@ function positiveInteger(value, fallback) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+// Recompute and persist the product's aggregate rating after review changes.
 async function refreshProductRating(productId, session) {
   const [summary] = await Review.aggregate([
     { $match: { productId: new mongoose.Types.ObjectId(productId) } },
@@ -52,6 +59,7 @@ async function refreshProductRating(productId, session) {
   );
 }
 
+// List reviews for one product with pagination and safe author projections.
 router.get('/product/:productId', async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.productId)) {
     return res.status(400).json({ status: 'error', message: 'Product ID is invalid.' });
@@ -75,6 +83,7 @@ router.get('/product/:productId', async (req, res) => {
   }
 });
 
+// Retrieve one review by its identifier.
 router.get('/:id', async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ status: 'error', message: 'Review ID is invalid.' });
@@ -88,6 +97,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Create a review for the current user and refresh the product rating atomically.
 router.post('/', authenticate, loadCurrentUser, async (req, res) => {
   const message = validateReviewPayload(req.body);
   if (message) return res.status(400).json({ status: 'error', message });
@@ -119,6 +129,7 @@ router.post('/', authenticate, loadCurrentUser, async (req, res) => {
   }
 });
 
+// Edit an owned review and update the associated product's aggregate rating.
 router.patch('/:id', authenticate, loadCurrentUser, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ status: 'error', message: 'Review ID is invalid.' });
@@ -156,6 +167,7 @@ router.patch('/:id', authenticate, loadCurrentUser, async (req, res) => {
   }
 });
 
+// Delete an owned review and recompute the product's rating in the same transaction.
 router.delete('/:id', authenticate, loadCurrentUser, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ status: 'error', message: 'Review ID is invalid.' });
@@ -183,5 +195,6 @@ router.delete('/:id', authenticate, loadCurrentUser, async (req, res) => {
   }
 });
 
+// Export the review router and validator for use by the application and tests.
 module.exports = router;
 module.exports.validateReviewPayload = validateReviewPayload;
