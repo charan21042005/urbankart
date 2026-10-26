@@ -28,6 +28,7 @@ function safeProperty(value, key) {
   try { return value?.[key]; } catch { return undefined; }
 }
 
+// Remove likely credentials and connection details before diagnostic output.
 function redactDiagnosticMessage(value) {
   if (typeof value !== 'string') return undefined;
   return value
@@ -41,6 +42,7 @@ function redactDiagnosticMessage(value) {
     .slice(0, 1000);
 }
 
+// Keep only recognized error names/codes and a redacted, bounded message.
 function safeErrorSummary(error) {
   const rawName = safeProperty(error, 'name');
   const rawCode = safeProperty(error, 'code');
@@ -58,6 +60,7 @@ function safeErrorSummary(error) {
   return summary;
 }
 
+// Include a short, cycle-safe chain of causes to help locate the failing stage.
 function createSafeDiagnostic(stage, error) {
   const safeStage = typeof stage === 'string' && /^[a-z][a-zA-Z0-9_.-]{0,63}$/.test(stage)
     ? stage
@@ -74,6 +77,7 @@ function createSafeDiagnostic(stage, error) {
   return { stage: safeStage, error: first, causes };
 }
 
+// Emit one JSON diagnostic without exposing raw error objects.
 function writeSafeDiagnostic(stream, stage, error) {
   stream.write(`${JSON.stringify(createSafeDiagnostic(stage, error))}\n`);
 }
@@ -111,6 +115,7 @@ async function run(options = {}) {
   let stage = 'preflight';
   let exitCode = 0;
   try {
+    // Validate the selected target before opening the intentionally read-only connection.
     const target = await safety.connectAfterPreflight({
       mode: process.env.URBANKART_DB_PROFILE === 'atlas-demo' ? 'atlas-demo-read' : 'audit',
       argv,
@@ -162,6 +167,7 @@ async function run(options = {}) {
       result.topology = { name: 'unverified', transactionsSupported: false, transactionVersionRequirementMet: null, reason: 'hello command unavailable' };
     }
 
+    // Collect existing collection counts, validators, and indexes without modifying them.
     for (const info of collections) {
       stage = 'metadata.collectionHandle';
       const collection = db.collection(info.name);
@@ -188,6 +194,7 @@ async function run(options = {}) {
       });
     }
 
+    // Report whether carts have an index on userId and whether the metadata was readable.
     const cartCollection = result.collections.find((item) => item.name === Cart.collection.name);
     const cartUserIndexes = cartCollection?.indexes?.filter((index) => index.key?.userId === 1) || [];
     result.cartUserIdIndex = {
@@ -197,6 +204,7 @@ async function run(options = {}) {
     };
 
     stage = 'metadata.day1StaticSeedNames';
+    // Compare expected seed names only; matching names do not prove data provenance.
     const seedNames = readDay1SeedNames();
     if (seedNames) {
       stage = 'lookup.day1ProductNames';
@@ -223,6 +231,7 @@ async function run(options = {}) {
     }
     stderr.write(`${label}: ${JSON.stringify(diagnostic)}\n`);
   } finally {
+    // Close the connection even when preflight or one of the read-only queries fails.
     let shouldDisconnect = connected;
     if (!shouldDisconnect) {
       try { shouldDisconnect = Boolean(isConnected()); } catch (error) {
