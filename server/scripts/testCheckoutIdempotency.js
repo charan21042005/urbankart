@@ -11,6 +11,7 @@ const {
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
+// Simulate a caller that sent a checkout but lost the HTTP response.
 function sendAndDiscardResponse(baseUrl, token, key) {
   const url = new URL('/api/cart/checkout', baseUrl);
   return new Promise((resolve, reject) => {
@@ -32,6 +33,7 @@ function sendAndDiscardResponse(baseUrl, token, key) {
   });
 }
 
+// Poll reconciliation briefly until the committed operation becomes visible.
 async function reconcileUntilVisible(baseUrl, token, key) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
@@ -53,6 +55,7 @@ async function run() {
   const originalCartUpdate = Cart.updateOne;
   let patchedCartUpdate = false;
 
+  // Keep fixture IDs centrally so the finally block can delete only this run's data.
   async function user(index) {
     const record = await createFixtureUser(runId, index);
     users.push(record);
@@ -72,6 +75,7 @@ async function run() {
   }
 
   try {
+    // Validate the isolated transaction database before running behavior checks.
     target = await prepareIntegration(process.argv.slice(2));
     const sharedProduct = await product(20);
     const firstUser = await user(1);
@@ -79,6 +83,7 @@ async function run() {
     const sharedKey = `uk-stage-h-${crypto.randomUUID()}`;
     http = await startHttpServer(app);
 
+    // Same user's repeated key returns the original order and can be reconciled.
     const first = await checkoutRequestWithKey(http.baseUrl, tokenFor(firstUser), sharedKey);
     assert.equal(first.status, 201, 'first request should create the order');
     const firstBody = await first.json();
@@ -91,6 +96,7 @@ async function run() {
     assert.equal(reconciliation.status, 200);
     assert.equal((await reconciliation.json()).order._id, firstBody.order._id);
 
+    // Keys are user-scoped: another user cannot read the first order and may reuse the key.
     const otherUser = await user(2);
     await cartFor(otherUser, sharedProduct);
     const otherUserLookup = await reconcileRequest(http.baseUrl, tokenFor(otherUser), sharedKey);
@@ -98,6 +104,7 @@ async function run() {
     const independentKeySpace = await checkoutRequestWithKey(http.baseUrl, tokenFor(otherUser), sharedKey);
     assert.equal(independentKeySpace.status, 201, 'the same key is independent for another user');
 
+    // Reusing a key with a changed cart must conflict without consuming stock.
     const changedProduct = await product(5);
     await Cart.updateOne({ _id: firstCart._id, userId: firstUser._id }, {
       $set: { items: [{ productId: changedProduct._id, quantity: 1 }] }
@@ -109,6 +116,7 @@ async function run() {
     assert.equal((await Cart.findById(firstCart._id).lean()).items.length, 1,
       'conflict must preserve the changed cart');
 
+    // Insufficient stock must leave both the cart and product quantity untouched.
     const insufficientUser = await user(6);
     const insufficientProduct = await product(1);
     const insufficientCart = await cartFor(insufficientUser, insufficientProduct, 2);
@@ -122,6 +130,7 @@ async function run() {
     assert.equal((await Cart.findById(insufficientCart._id).lean()).items.length, 1,
       'insufficient stock must preserve the cart');
 
+    // Reconcile a successful operation after intentionally discarding its response.
     const droppedUser = await user(3);
     await cartFor(droppedUser, sharedProduct);
     const droppedKey = `uk-stage-h-${crypto.randomUUID()}`;
@@ -131,6 +140,7 @@ async function run() {
     assert.equal(recoveredBody.status, 'success');
     assert.ok(recoveredBody.order._id, 'reconciliation returns the persisted order id');
 
+    // Concurrent requests with the same key should converge on one persisted order.
     const racingUser = await user(4);
     const racingCart = await cartFor(racingUser, sharedProduct);
     const racingKey = `uk-stage-h-${crypto.randomUUID()}`;
@@ -146,6 +156,7 @@ async function run() {
     assert.equal(await CheckoutOperation.countDocuments({ userId: racingUser._id, key: racingKey }), 1);
     assert.equal((await Cart.findById(racingCart._id).lean()).items.length, 0);
 
+    // Inject failure after operation creation and verify all transaction writes roll back.
     const rollbackUser = await user(5);
     const rollbackProduct = await product(4);
     const rollbackCart = await cartFor(rollbackUser, rollbackProduct, 2);
@@ -180,6 +191,7 @@ async function run() {
     else process.stderr.write('Idempotency integration test failed; connection details were suppressed.\n');
     process.exitCode = 1;
   } finally {
+    // Restore patched methods, stop the server, and delete only captured fixture records.
     if (patchedCartUpdate) Cart.updateOne = originalCartUpdate;
     if (http?.server) {
       http.server.closeAllConnections();

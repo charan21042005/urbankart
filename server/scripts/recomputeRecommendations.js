@@ -8,6 +8,7 @@ const { acquireRecommendationSchedulerLock } = require('../jobs/recommendationSc
 
 let schedulerLease;
 
+// Acquire exclusive job access, verify the target database, then rebuild the cache.
 async function main() {
   loadSelectedDatabaseEnvironment();
   schedulerLease = acquireRecommendationSchedulerLock();
@@ -27,6 +28,7 @@ async function main() {
     const build = await mongoose.connection.db.admin().command({ buildInfo: 1 });
     safety.validateAtlasDemoHello(hello, build.versionArray, target.expectedTopology);
   } else safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
+  // Ensure the recommendation source index exists before updating computed results.
   await Promise.all([Product, Recommendation].map((model) => model.createIndexes()));
   const indexes = await Recommendation.collection.indexes();
   if (!indexes.some((index) => index.name === 'uniq_recommendation_source'
@@ -42,6 +44,7 @@ main().catch((error) => {
   else console.error(`Recommendation recompute failed (${error?.name || 'Error'}); details were suppressed.`);
   process.exitCode = 1;
 }).finally(async () => {
+  // Release both database and scheduler resources on success or failure.
   if (mongoose.connection.readyState !== 0) await mongoose.disconnect().catch(() => {});
   if (schedulerLease) {
     try { await schedulerLease.release(); }

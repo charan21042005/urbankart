@@ -8,6 +8,7 @@ const models = [
   require('../models/CheckoutOperation')
 ];
 
+// Create validators and indexes only after the Atlas target passes safety checks.
 async function initialize() {
   loadSelectedDatabaseEnvironment();
   let connected = false;
@@ -27,12 +28,15 @@ async function initialize() {
 
     // Refuse to initialize over any pre-existing collection/data. The read-only
     // audit command is the required next step if the target is no longer empty.
+    // This initializer is deliberately first-run-only; inspect instead of overwriting data.
     const existing = await db.listCollections({}, { nameOnly: true }).toArray();
     if (existing.length) throw new safety.SafetyError('Atlas demo database is not empty. Run the read-only audit and review its schema before any initialization.');
+    // Create each application collection with server-side document validation enabled.
     for (const [name, validator] of Object.entries(collectionValidators)) {
       await db.createCollection(name, { validator: { $jsonSchema: validator }, validationLevel: 'strict', validationAction: 'error' });
     }
     await Promise.all(models.map((model) => model.createIndexes()));
+    // Re-read collection metadata to verify the server actually stored each validator.
     const applied = await db.listCollections({}, { nameOnly: false }).toArray();
     const verified = new Set(applied.filter((item) => item.options?.validator?.$jsonSchema).map((item) => item.name));
     for (const name of Object.keys(collectionValidators)) if (!verified.has(name)) throw new Error('A required collection validator could not be verified.');
@@ -42,6 +46,7 @@ async function initialize() {
     else process.stderr.write('Atlas demo initialization failed; connection details were suppressed.\n');
     process.exitCode = 1;
   } finally {
+    // Release the database connection regardless of whether setup succeeded.
     if (connected || mongoose.connection.readyState !== 0) await mongoose.disconnect().catch(() => { process.exitCode = 1; });
   }
 }

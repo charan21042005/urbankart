@@ -19,27 +19,32 @@ let shutdownRequested = false;
 let activePersistenceChild = null;
 let mutationMayHaveOccurred = false;
 
+// Stop future requests and terminate the optional child process on graceful shutdown.
 function onShutdownSignal(signal) {
   shutdownRequested = signal;
   if (activePersistenceChild) activePersistenceChild.kill();
 }
 
+// Fail before starting another test action once the process receives a shutdown signal.
 function ensureRunning() {
   if (shutdownRequested) throw new Error(`Graceful ${shutdownRequested} received; no further test requests will start.`);
 }
 
+// Start the application on an ephemeral local port for endpoint-level checks.
 async function listen() {
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
   return { server, base: `http://127.0.0.1:${server.address().port}` };
 }
 
+// Stop the temporary listener and any active keep-alive connections.
 async function stop(http) {
   if (!http?.server) return;
   http.server.closeAllConnections();
   await new Promise((resolve) => http.server.close(resolve));
 }
 
+// Launch a fresh Node process to prove created fixtures survive process restarts.
 async function runPersistenceProbe(fixture) {
   const child = spawn(process.execPath, [__filename, ...process.argv.slice(2), '--persistence-probe'], {
     cwd: process.cwd(), env: process.env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true
@@ -60,6 +65,7 @@ async function runPersistenceProbe(fixture) {
     if (outcome.code !== 0) throw new Error(`Fresh API process persistence probe failed (exit ${outcome.code}); sanitized probe diagnostics: ${outcome.stderr.slice(0, 300)}`);
 }
 
+// In the fresh process, verify the persisted customer, order, and product through the API.
 async function runPersistenceProbeChild() {
   const fixture = JSON.parse(fs.readFileSync(0, 'utf8'));
   const target = atlas.loadAndValidateTarget(process.argv.slice(2));
@@ -84,6 +90,7 @@ async function runPersistenceProbeChild() {
   }
 }
 
+// Centralize authenticated JSON requests and track any request that could mutate data.
 function client(base, token) {
   return async (path, { method = 'GET', body, headers = {} } = {}) => {
     ensureRunning();
@@ -97,6 +104,7 @@ function client(base, token) {
   };
 }
 
+// Run the Atlas demo checks and retain enough exact markers to safely clean up fixtures.
 async function run() {
   if (process.argv.includes('--persistence-probe')) return runPersistenceProbeChild();
   shutdownRequested = false;
@@ -108,6 +116,7 @@ async function run() {
   let report;
   let baselineRecommendationCount;
   let baselineOrderCount;
+  // This unique marker ties generated test records to this run for reconciliation.
   const runTag = `${RUN_MARKER_PREFIX}:${crypto.randomUUID()}`;
   const operationKeyPrefix = runTag.replace(/[^a-z0-9]/gi, '');
   const fixtures = { users: new Map(), products: new Map(), carts: new Map(), orders: new Map(), reviews: new Map(), operations: new Map() };
@@ -124,11 +133,13 @@ async function run() {
   process.once('SIGINT', onShutdownSignal);
   process.once('SIGTERM', onShutdownSignal);
 
+  // Record cart IDs for safe teardown after cart endpoint operations.
   const rememberCart = async (userId) => {
     const cart = await Cart.findOne({ userId }).select('_id').lean();
     if (cart) fixtures.carts.set(String(cart._id), String(userId));
     return cart;
   };
+  // Mark products before creation so cleanup can recover records if the request is interrupted.
   const createProduct = async (label, stock) => {
     ensureRunning();
     const name = `${runTag} ${label}`;
@@ -144,6 +155,7 @@ async function run() {
     fixtures.products.set(String(product._id), { name, marker: runTag });
     return product;
   };
+  // Create a uniquely named customer through the real registration route.
   const register = async (base, suffix) => {
     ensureRunning();
     const email = `${runTag.slice(-32).replace(/[^a-z0-9]/gi, '').toLowerCase()}-${suffix}@example.invalid`;
@@ -160,6 +172,7 @@ async function run() {
     fixtures.users.set(result.user.id, { email, name, password });
     return { id: result.user.id, email, password, token: result.token };
   };
+  // Associate only checkout operations carrying this run's expected keys with fixtures.
   const captureCheckoutRecords = async (userIds) => {
     if (!userIds.length) return;
     const customerIds = userIds.map((id) => new mongoose.Types.ObjectId(id));
@@ -173,12 +186,14 @@ async function run() {
   };
 
   try {
+    // Verify the Atlas target and acquire exclusive scheduler/API locks before testing.
     target = atlas.loadAndValidateTarget(process.argv.slice(2));
     schedulerLease = await atlas.acquireIntegrationSchedulerLease();
     verified = await atlas.connectAndVerify(target);
     assert.equal(verified.databaseName, TARGET_DB);
     if (!getJwtSecret()) throw new safety.SafetyError('JWT_SECRET was not loaded from the selected Atlas profile.');
 
+    // Snapshot unaffected data and require an existing admin for protected read checks.
     baselineRecommendationCount = await Recommendation.countDocuments({});
     baselineOrderCount = await Order.countDocuments({});
     const admin = await User.findOne({ role: 'admin', isActive: { $ne: false } }).select('_id role isActive').lean();
@@ -186,6 +201,7 @@ async function run() {
     const adminToken = signUserToken({ _id: admin._id, role: admin.role });
     if (!adminToken) throw new safety.SafetyError('Could not sign the read-only admin endpoint test token.');
 
+    // Check admin/customer authorization and the read-only admin endpoints first.
     http = await listen();
     const anonymous = client(http.base);
     const adminApi = client(http.base, adminToken);
@@ -215,6 +231,7 @@ async function run() {
     assert.equal((await adminApi(`/api/products/${adminProduct._id}`, { method: 'DELETE' })).status, 200);
     assert.equal(await Product.countDocuments({ _id: adminProduct._id }), 0);
 
+    // Exercise registration/login, customer profile, and rejection of admin-only access.
     const secondCustomer = await register(http.base, 'concurrent-a');
     const thirdCustomer = await register(http.base, 'concurrent-b');
     const loginResponse = await anonymous('/api/auth/login', { method: 'POST', body: { email: customer.email, password: customer.password } });
@@ -227,6 +244,7 @@ async function run() {
     assert.equal((await profileResponse.json()).id, customer.id);
     assert.equal((await customerApi('/api/admin/overview')).status, 403);
 
+    // Verify adding, changing, removing, and clearing cart contents over HTTP.
     const cartProduct = await createProduct('cart-lifecycle', 10);
     let cartResponse = await customerApi('/api/cart/items', { method: 'POST', body: { productId: String(cartProduct._id), quantity: 1 } });
     assert.equal(cartResponse.status, 201);
@@ -243,6 +261,7 @@ async function run() {
     assert.equal((await (await customerApi('/api/cart')).json()).items.length, 0);
     await rememberCart(customer.id);
 
+    // Check checkout snapshots, stock decrement, cart clearing, replay, and key conflicts.
     const checkoutProduct = await createProduct('checkout-price-snapshot', 10);
     assert.equal((await customerApi('/api/cart/items', { method: 'POST', body: { productId: String(checkoutProduct._id), quantity: 2 } })).status, 201);
     await rememberCart(customer.id);
@@ -277,6 +296,7 @@ async function run() {
     assert.equal((await customerApi('/api/cart', { method: 'DELETE' })).status, 200);
     await rememberCart(customer.id);
 
+    // Inject a controlled order failure and ensure all transactional writes roll back.
     const rollbackProduct = await createProduct('controlled-rollback', 3);
     assert.equal((await customerApi('/api/cart/items', { method: 'POST', body: { productId: String(rollbackProduct._id), quantity: 1 } })).status, 201);
     await rememberCart(customer.id);
@@ -295,6 +315,7 @@ async function run() {
     assert.equal(await Order.countDocuments({ customerId: customer.id }), orderCountBeforeRollback);
     assert.equal(await CheckoutOperation.countDocuments({ userId: customer.id, key: rollbackKey }), operationCountBeforeRollback);
 
+    // Race two customers for one product to verify stock never becomes negative.
     const raceProduct = await createProduct('bounded-concurrency-stock-one', 1);
     for (const user of [secondCustomer, thirdCustomer]) {
       const api = client(http.base, user.token);
@@ -320,6 +341,7 @@ async function run() {
     assert.equal(overviewMetrics.orderCount, baselineOrderCount + 2);
     assert.ok((await adminApi('/api/admin/dashboard').then((response) => response.json())).hasOrders);
 
+    // Verify review ownership and product rating aggregate updates through the API.
     const reviewProduct = await createProduct('review-rating-aggregate', 4);
     const reviewApi = customerApi;
     const reviewResponse = await reviewApi('/api/reviews', { method: 'POST', body: { productId: String(reviewProduct._id), rating: 5, text: runTag } });
@@ -340,6 +362,7 @@ async function run() {
     assert.equal(reviewAggregate.ratingCount, 0);
     assert.equal(reviewAggregate.ratingAvg, 0);
 
+    // Reconnect in a new process after checking fixtures remain readable across restarts.
     await stop(http);
     http = null;
     await atlas.close();
@@ -354,11 +377,13 @@ async function run() {
     testStatus = shutdownRequested ? 'INTERRUPTED' : error instanceof safety.SafetyError && !verified ? 'REFUSED' : 'FAILED';
     failure = error instanceof safety.SafetyError ? error.message : `${error?.name || 'Error'}; details suppressed`;
   } finally {
+    // Restore patched methods and stop the listener before reconciling test data.
     if (originalOrderCreate) Order.create = originalOrderCreate;
     try { await stop(http); } catch (error) { cleanupErrors.push(`http-listener-close:run:${error?.name || 'Error'}`); }
     const idList = (records) => [...records.keys()];
     const addError = (kind, id, error) => cleanupErrors.push(`${kind}:${id || 'run'}:${error?.name || 'Error'}`);
     const idAbsent = async (Model, id) => !(await Model.exists({ _id: id }));
+    // Cleanup is allowed only while connected to the exact database whose identity was verified.
     let dbReadyForCleanup = verified?.databaseName === TARGET_DB
       && mongoose.connection.readyState === 1 && mongoose.connection.name === TARGET_DB;
 
@@ -369,6 +394,7 @@ async function run() {
       } catch (error) { addError('reconnect-for-cleanup', null, error); }
     }
 
+    // Recover fixtures from their unique markers in case interruption happened mid-request.
     if (dbReadyForCleanup) {
       try {
         for (const [email, fixture] of plannedUsers) {
@@ -407,6 +433,7 @@ async function run() {
         }
         await captureCheckoutRecords([...fixtures.users.keys()]);
 
+        // Remove dependent reviews before products; delete only records matching exact markers.
         for (const [id, fixture] of fixtures.reviews) {
           try {
             await Review.deleteOne({ _id: id, userId: fixture.userId, productId: fixture.productId, text: runTag });
@@ -414,6 +441,7 @@ async function run() {
           } catch (error) { retained.reviews.add(id); addError('review', id, error); }
         }
 
+        // Checkout operation records prove which orders belong to this run.
         const operationsForRun = [];
         for (const [id, fixture] of fixtures.operations) {
           if (!expectedOperationKeys.has(fixture.key) || !fixtures.users.has(fixture.userId)) {
@@ -459,6 +487,7 @@ async function run() {
           }
         }
 
+        // Remove carts before their owners and keep any record whose ownership is uncertain.
         for (const [id, ownerId] of fixtures.carts) {
           if (!fixtures.users.has(ownerId)) { retained.carts.add(id); addError('cart-owner', id, new Error('Owner is not a fixture user')); continue; }
           try {
@@ -467,6 +496,7 @@ async function run() {
           } catch (error) { retained.carts.add(id); addError('cart', id, error); }
         }
 
+        // Preserve products still referenced by a cart or review instead of risking data loss.
         for (const [id, fixture] of fixtures.products) {
           try {
             const stillReferenced = await Promise.all([
@@ -478,6 +508,7 @@ async function run() {
           } catch (error) { retained.products.add(id); addError('product', id, error); }
         }
 
+        // Delete fixture users only after confirming they no longer own related records.
         for (const [id, fixture] of fixtures.users) {
           try {
             const remainingOwned = await Promise.all([
@@ -490,6 +521,7 @@ async function run() {
           } catch (error) { retained.users.add(id); addError('user', id, error); }
         }
 
+        // Verify cleanup by checking every tracked fixture collection for remaining IDs.
         const remaining = await Promise.all([
           User.countDocuments({ _id: { $in: [...fixtures.users.keys()] } }),
           Product.countDocuments({ _id: { $in: [...fixtures.products.keys()] } }),
@@ -522,6 +554,7 @@ async function run() {
       for (const id of fixtures.operations.keys()) retained.checkoutOperations.add(id);
     }
 
+    // Release the DB connection and local locks even when cleanup reports a problem.
     try { await atlas.close(); } catch (error) { addError('database-close', null, error); }
     if (schedulerLease) {
       try { await schedulerLease.release(); } catch (error) { addError('scheduler-lock-release', null, error); }

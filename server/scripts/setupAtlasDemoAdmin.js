@@ -5,6 +5,7 @@ const User = require('../models/User');
 const { loadSelectedDatabaseEnvironment } = require('../config/databaseEnvironment');
 const safety = require('./databaseSafety');
 
+// Read the password without displaying the typed characters in the terminal.
 function askHidden(question) {
   return new Promise((resolve, reject) => {
     const input = process.stdin;
@@ -23,6 +24,7 @@ function askHidden(question) {
 }
 
 async function main() {
+  // Require the explicit Atlas demo profile before allowing account creation.
   loadSelectedDatabaseEnvironment();
   if (process.env.URBANKART_DB_PROFILE !== 'atlas-demo') throw new safety.SafetyError('Select the atlas-demo profile before admin setup.');
   const target = await safety.connectAfterPreflight({ mode: 'atlas-demo-write', argv: process.argv.slice(2), connect: (uri) => mongoose.connect(uri, { autoCreate: false, autoIndex: false, serverSelectionTimeoutMS: 10_000 }) });
@@ -31,19 +33,24 @@ async function main() {
     const hello = await db.admin().command({ hello: 1 });
     const build = await db.admin().command({ buildInfo: 1 });
     safety.validateAtlasDemoHello(hello, build.versionArray, target.expectedTopology);
+    // Collect and validate the new account details interactively.
     const prompt = readline.createInterface({ input: process.stdin, output: process.stdout });
     const email = (await prompt.question('Atlas demo admin email: ')).trim().toLowerCase(); prompt.close();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) throw new Error('A valid email address is required.');
     const password = await askHidden('New admin password (input hidden): ');
     const bytes = Buffer.byteLength(password, 'utf8');
     if (bytes < 8 || bytes > 72) throw new Error('Password must be 8 to 72 UTF-8 bytes.');
+    // Refuse duplicate addresses rather than changing the role of an existing account.
     if (await User.findOne({ email })) throw new Error('That email already exists; no account or role was changed.');
     const namePrompt = readline.createInterface({ input: process.stdin, output: process.stdout });
     let name; try { name = (await namePrompt.question('Display name: ')).trim(); } finally { namePrompt.close(); }
     if (!name || name.length > 100) throw new Error('A display name of 1 to 100 characters is required.');
     const user = await User.create({ name, email, passwordHash: await bcrypt.hash(password, 12), role: 'admin' });
     process.stdout.write(JSON.stringify({ status: 'created', database: target.databaseName, topology: target.expectedTopology, role: user.role }) + '\n');
-  } finally { await mongoose.disconnect(); }
+  } finally {
+    // Close the Atlas connection even if validation or account creation fails.
+    await mongoose.disconnect();
+  }
 }
 
 main().catch((error) => {

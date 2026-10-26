@@ -9,6 +9,7 @@ const Order = require('../models/Order');
 const app = require('../app');
 const { recomputeRecommendations } = require('../jobs/computeRecommendations');
 
+// Verify the Day 5 admin analytics and recommendation features against a local DB.
 async function main() {
   process.env.JWT_SECRET ||= crypto.randomBytes(48).toString('hex');
   process.env.JWT_EXPIRES_IN ||= '10m';
@@ -21,6 +22,7 @@ async function main() {
   let customerId;
   const email = `day5-${crypto.randomUUID()}@example.invalid`;
   try {
+    // Validate the disposable target and its transaction-capable replica-set identity.
     const target = await safety.connectAfterPreflight({
       mode: 'integration-test',
       argv: process.argv.slice(2),
@@ -31,12 +33,14 @@ async function main() {
     for (const model of [Product, Recommendation, User, Order]) await model.createIndexes();
     assert((await Recommendation.collection.indexes()).some((index) => index.name === 'uniq_recommendation_source' && index.unique));
 
+    // Run real HTTP requests through the app on a temporary loopback port.
     server = app.listen(0, '127.0.0.1');
     await new Promise((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
     const base = `http://127.0.0.1:${server.address().port}`;
     const emptyResponse = await fetch(`${base}/api/admin/dashboard`);
     assert.equal(emptyResponse.status, 401);
 
+    // Build recognizable products and orders for category, sales, and recommendation checks.
     const [a, b, c] = await Product.create([
       { name: 'Wireless Keyboard', description: 'Day 5 fixture', price: 20, stock: 2, category: 'Electronics', tags: ['wireless', 'keyboard'], attributes: [{ key: 'switch', value: 'mechanical' }] },
       { name: 'Wireless Mouse', description: 'Day 5 fixture', price: 12, stock: 3, category: 'Electronics', tags: ['wireless', 'mouse'], attributes: [{ key: 'switch', value: 'mechanical' }] },
@@ -65,6 +69,7 @@ async function main() {
 
     const forbidden = await fetch(`${base}/api/admin/dashboard`, { headers: { authorization: `Bearer ${token(customer)}` } });
     assert.equal(forbidden.status, 403);
+    // Use the admin identity to validate analytics after checking access controls.
     const dashboardResponse = await fetch(`${base}/api/admin/dashboard`, { headers: { authorization: `Bearer ${token(admin)}` } });
     assert.equal(dashboardResponse.status, 200);
     const dashboard = await dashboardResponse.json();
@@ -73,6 +78,7 @@ async function main() {
     assert.equal(dashboard.topProducts[0].unitsSold, 4);
     assert.deepEqual(dashboard.orderStatusBreakdown.map(({ status, count }) => [status, count]), [['delivered', 2], ['cancelled', 1], ['completed', 1], ['pending', 1], ['shipped', 1]]);
 
+    // Rebuild recommendation results and verify both cached results and fallback behavior.
     const recompute = await recomputeRecommendations();
     assert.equal(recompute.productsProcessed, await Product.countDocuments());
     const recommendations = await fetch(`${base}/api/products/${a._id}/recommendations`);
@@ -93,6 +99,7 @@ async function main() {
     assert.equal(missing.status, 404);
     console.log(JSON.stringify({ status: 'PASS', database: target.databaseName, replicaSet: hello.setName, fixtures: { products: fixtureProductIds.length, orders: orderIds.length }, dashboard: { categoryRows: dashboard.revenueByCategory.length, topProducts: dashboard.topProducts.length, statusRows: dashboard.orderStatusBreakdown.length }, recommendations: { computedProducts: recompute.productsProcessed, cacheAndFallback: true }, auth: 'customer denied; admin allowed' }));
   } finally {
+    // Remove test-owned rows and close resources while preserving unrelated data.
     if (mongoose.connection.readyState === 1) {
       await Recommendation.deleteMany({ productId: { $in: fixtureProductIds } });
       if (orderIds.length) await Order.deleteMany({ _id: { $in: orderIds } });

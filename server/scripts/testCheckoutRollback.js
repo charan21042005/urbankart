@@ -8,6 +8,7 @@ const {
   cleanupFixtures, startHttpServer
 } = require('./checkoutIntegrationCommon');
 
+// Force an order-write failure and prove the transaction undoes earlier checkout writes.
 async function run() {
   let target;
   let http;
@@ -20,6 +21,7 @@ async function run() {
   const originalStartSession = mongoose.startSession;
   let patched = false;
   try {
+    // Verify the isolated transactional database, then create a single checkout fixture.
     target = await prepareIntegration(process.argv.slice(2));
     const user = await createFixtureUser(runId, 1);
     userIds.push(user._id);
@@ -32,6 +34,7 @@ async function run() {
     let orderWriteFailureInjected = false;
     let sessionEnded = false;
 
+    // Instrument the real stock update and inject failure only after it has happened.
     Product.findOneAndUpdate = async function (...args) {
       const result = await originalProductUpdate.apply(Product, args);
       if (result) stockUpdateAppliedInSession = true;
@@ -54,6 +57,7 @@ async function run() {
     patched = true;
 
     http = await startHttpServer(app);
+    // Submit checkout and verify stock, order, cart, and session all reflect rollback.
     const response = await checkoutRequest(http.baseUrl, tokenFor(user));
     assert.equal(response.status, 503, 'checkout should report that the controlled operation failed');
     const afterStock = await Product.findById(product._id).select('stock').lean();
@@ -83,6 +87,7 @@ async function run() {
     }
     process.exitCode = 1;
   } finally {
+    // Restore patched model methods, stop HTTP, and remove only this run's records.
     if (patched) {
       Order.create = originalOrderCreate;
       Product.findOneAndUpdate = originalProductUpdate;

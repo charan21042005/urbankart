@@ -7,6 +7,7 @@ const models = [
   require('../models/CheckoutOperation')
 ];
 
+// Initialize the approved local replica set and report verified schema artifacts.
 async function initialize() {
   let connected = false;
   try {
@@ -27,6 +28,7 @@ async function initialize() {
 
     // A database may only be initialized after both the URI and live server
     // identity pass the local-only gate. Create/modify just the seven known app collections.
+    // Build a set for deciding whether each known app collection needs creation or update.
     const existing = new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map(({ name }) => name));
     for (const [name, validator] of Object.entries(collectionValidators)) {
       if (!existing.has(name)) {
@@ -40,6 +42,7 @@ async function initialize() {
         });
       }
     }
+    // Define model indexes, then independently verify server-side validators below.
     await Promise.all(models.map((model) => model.createIndexes()));
     const applied = await db.listCollections({}, { nameOnly: false }).toArray();
     const verified = new Set(applied.filter((item) => item.options?.validator?.$jsonSchema).map((item) => item.name));
@@ -59,6 +62,7 @@ async function initialize() {
     else process.stderr.write('Local database initialization failed; connection details were suppressed.\n');
     process.exitCode = 1;
   } finally {
+    // Disconnect even after refusal or failed schema verification.
     if (connected || mongoose.connection.readyState !== 0) await mongoose.disconnect().catch(() => { process.exitCode = 1; });
   }
 }

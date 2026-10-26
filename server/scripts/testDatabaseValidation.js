@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const safety = require('./databaseSafety');
 
 const invalidDocuments = {
+  // Each factory violates one required collection invariant for server validation.
   products: (id) => ({ _id: id, name: 'Invalid stock fixture', price: 1, stock: -1, category: 'Fixture', attributes: [] }),
   users: (id) => ({ _id: id, name: 'Invalid role fixture', email: `invalid-${id}@example.invalid`, passwordHash: 'not-a-real-password-hash', role: 'owner' }),
   carts: (id) => ({ _id: id, userId: new mongoose.Types.ObjectId(), items: [{ _id: new mongoose.Types.ObjectId(), productId: new mongoose.Types.ObjectId(), quantity: 0 }] }),
@@ -11,6 +12,7 @@ const invalidDocuments = {
   checkoutoperations: (id) => ({ _id: id, userId: new mongoose.Types.ObjectId(), key: 'too-short', fingerprint: 'a'.repeat(64), orderId: new mongoose.Types.ObjectId(), completedAt: new Date() })
 };
 
+// Attempt one invalid insert per collection and require MongoDB to reject each.
 async function verify(argv = process.argv.slice(2)) {
   let connected = false;
   try {
@@ -26,6 +28,7 @@ async function verify(argv = process.argv.slice(2)) {
     safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
 
     const rejected = [];
+    // A successful invalid insert is deleted by its exact sentinel ID before failing.
     for (const [name, makeInvalid] of Object.entries(invalidDocuments)) {
       const _id = new mongoose.Types.ObjectId();
       try {
@@ -46,6 +49,7 @@ async function verify(argv = process.argv.slice(2)) {
     else process.stderr.write('Database validation test failed; connection and document details were suppressed.\n');
     process.exitCode = 1;
   } finally {
+    // Always close the connection opened for verification.
     if (connected || mongoose.connection.readyState !== 0) await mongoose.disconnect().catch(() => { process.exitCode = 1; });
   }
 }

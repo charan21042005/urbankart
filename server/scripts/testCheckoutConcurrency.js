@@ -8,6 +8,7 @@ const {
   cleanupFixtures, startHttpServer
 } = require('./checkoutIntegrationCommon');
 
+// Race many customers for one unit of stock and assert only one checkout commits.
 async function run() {
   let target;
   let http;
@@ -16,6 +17,7 @@ async function run() {
   const cartIds = [];
   let productId;
   try {
+    // Prepare a confirmed transaction-capable database and a one-unit product.
     target = await prepareIntegration(process.argv.slice(2));
     const product = await createFixtureProduct(runId, 1);
     productId = product._id;
@@ -31,6 +33,7 @@ async function run() {
     }
 
     http = await startHttpServer(app);
+    // Launch all checkout attempts together and make sure every bounded request settles.
     const outcomes = await Promise.allSettled(users.map((user) => checkoutRequest(http.baseUrl, tokenFor(user))));
     assert.equal(outcomes.filter((item) => item.status === 'rejected').length, 0, 'all bounded HTTP requests should settle');
     const responses = outcomes.map((item) => item.value);
@@ -39,6 +42,7 @@ async function run() {
     assert.equal(successIndexes.length, 1, 'exactly one request must succeed');
     assert.equal(statuses.filter((status) => status === 409).length, 19, 'the other requests must receive safe stock conflicts');
 
+    // Check persisted state, not only response codes, to detect overselling or partial writes.
     const finalProduct = await Product.findById(product._id).select('stock').lean();
     const persistedOrders = await Order.find({ customerId: { $in: userIds } }).lean();
     const persistedCarts = await Cart.find({ _id: { $in: cartIds } }).lean();
@@ -78,6 +82,7 @@ async function run() {
     }
     process.exitCode = 1;
   } finally {
+    // Stop the test server and clean up the exact fixture IDs captured above.
     if (http?.server) {
       http.server.closeAllConnections();
       await new Promise((resolve) => http.server.close(resolve));

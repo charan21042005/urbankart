@@ -8,6 +8,7 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const Review = require('../models/Review');
 
+// Exercise review ownership, CRUD endpoints, and the product rating aggregates.
 async function main() {
   const secret = crypto.randomBytes(48).toString('hex');
   process.env.JWT_SECRET = secret;
@@ -18,6 +19,7 @@ async function main() {
   let secondUserId;
   const email = `review-${crypto.randomUUID()}@example.invalid`;
   try {
+    // Confirm a local replica-set target before adding synthetic test records.
     const target = await safety.connectAfterPreflight({
       mode: 'integration-test',
       argv: process.argv.slice(2),
@@ -27,6 +29,7 @@ async function main() {
     safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
     for (const Model of [Product, User, Review]) await Model.createIndexes();
 
+    // Create one product and two users so ownership checks can be tested.
     const [product] = await Product.create([{
       name: 'Review integration fixture', price: 1, stock: 1, category: 'Integration'
     }]);
@@ -51,6 +54,7 @@ async function main() {
       ...(body ? { body: JSON.stringify(body) } : {})
     });
 
+    // Create a review and verify that the product's average/count are recalculated.
     const createdResponse = await request('/api/reviews', {
       method: 'POST', headers: auth(userId), body: { productId: String(productId), rating: 5, text: 'integration review' }
     });
@@ -60,6 +64,7 @@ async function main() {
     assert.equal(storedProduct.ratingAvg, 5);
     assert.equal(storedProduct.ratingCount, 1);
 
+    // A different user cannot edit the review; its owner can change its rating.
     const forbiddenUpdate = await request(`/api/reviews/${created._id}`, {
       method: 'PATCH', headers: auth(secondUserId), body: { rating: 1 }
     });
@@ -72,6 +77,7 @@ async function main() {
     assert.equal(storedProduct.ratingAvg, 3);
     assert.equal(storedProduct.ratingCount, 1);
 
+    // Multiple reviews are allowed, and aggregates should include both records.
     const secondResponse = await request('/api/reviews', {
       method: 'POST', headers: auth(userId), body: { productId: String(productId), rating: 5 }
     });
@@ -81,6 +87,7 @@ async function main() {
     assert.equal(storedProduct.ratingAvg, 4);
     assert.equal(storedProduct.ratingCount, 2);
 
+    // Check list/read endpoints, then remove reviews and verify aggregate reset.
     const listed = await request(`/api/reviews/product/${productId}`);
     assert.equal(listed.status, 200);
     assert.equal((await listed.json()).reviews.length, 2);
@@ -101,6 +108,7 @@ async function main() {
       aggregateLifecycle: '5/1 -> 3/1 -> 4/2 -> 5/1 -> 0/0', ownershipDenied: true, duplicateReviewsAllowed: true
     }));
   } finally {
+    // Stop the temporary HTTP server and delete only the captured fixture records.
     if (server) {
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));

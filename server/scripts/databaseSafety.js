@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env'), quiet: true });
 
+// Use a distinct error type so callers can report a refused target separately.
 class SafetyError extends Error {
   constructor(message) {
     super(message);
@@ -12,6 +13,7 @@ class SafetyError extends Error {
   }
 }
 
+// Read a single flag value; repeated or value-less flags are treated as invalid.
 function argumentValue(argv, flag) {
   const index = argv.indexOf(flag);
   if (index === -1 || !argv[index + 1] || argv[index + 1].startsWith('--')) return null;
@@ -19,6 +21,7 @@ function argumentValue(argv, flag) {
   return argv[index + 1];
 }
 
+// Resolve the database name encoded by the URI and reject ambiguous selection.
 function getUriDatabaseName(uri) {
   if (typeof uri !== 'string' || !uri) throw new SafetyError('MONGODB_URI is not configured.');
   let parsed;
@@ -49,6 +52,7 @@ function getUriDatabaseName(uri) {
   return pathName;
 }
 
+// Limit local integration targets to literal loopback hosts and one replica set.
 function validateLocalReplicaSetUri(uri) {
   if (typeof uri !== 'string' || !uri.startsWith('mongodb://')) {
     throw new SafetyError('Integration tests require a mongodb:// URI with loopback hosts and an explicit replicaSet option.');
@@ -81,6 +85,7 @@ function validateLocalReplicaSetUri(uri) {
   return { replicaSet };
 }
 
+// Check the live hello response and reject replica sets advertising remote members.
 function validateLocalReplicaSetHello(hello, expectedName) {
   if (hello?.setName !== expectedName || hello?.isWritablePrimary !== true) {
     throw new SafetyError('Connected server is not the confirmed writable local replica-set primary.');
@@ -97,6 +102,7 @@ function validateLocalReplicaSetHello(hello, expectedName) {
   return true;
 }
 
+// Verify Atlas profile, explicit target confirmation, pinned host, and topology.
 function validateAtlasDemoPreflight({ argv = process.argv.slice(2), env = process.env, readOnly = false }) {
   const confirmedName = argumentValue(argv, readOnly ? '--confirm-atlas-read-db' : '--confirm-atlas-demo-db');
   if (confirmedName !== 'urbankart_atlas_demo' || env.URBANKART_EXPECTED_DB_NAME !== 'urbankart_atlas_demo'
@@ -130,6 +136,7 @@ function validateAtlasDemoPreflight({ argv = process.argv.slice(2), env = proces
   return { databaseName: 'urbankart_atlas_demo', uri: env.MONGODB_URI, expectedTopology };
 }
 
+// Confirm the normal API is configured for the explicitly isolated local database.
 function validateLocalServerTarget(env = process.env) {
   if (!env.URBANKART_EXPECTED_DB_NAME || getUriDatabaseName(env.MONGODB_URI) !== env.URBANKART_EXPECTED_DB_NAME) {
     throw new SafetyError('Local server URI and URBANKART_EXPECTED_DB_NAME must select the same explicit database.');
@@ -144,6 +151,7 @@ function validateLocalServerTarget(env = process.env) {
   return { databaseName: env.URBANKART_EXPECTED_DB_NAME, expectedReplicaSetName: topology.replicaSet };
 }
 
+// Compare the live Atlas topology and version against the operator's attestation.
 function validateAtlasDemoHello(hello, versionArray, expectedTopology) {
   const topology = classifyTopology(hello);
   if (topology.name !== expectedTopology || !topology.transactionsSupported) {
@@ -155,6 +163,7 @@ function validateAtlasDemoHello(hello, versionArray, expectedTopology) {
   return { name: topology.name, transactionsSupported: true };
 }
 
+// Apply common target checks, with stricter requirements for writes and integration.
 function validatePreflight({ mode, argv, env }) {
   const isAudit = mode === 'audit';
   const isIntegration = mode === 'integration-test';
@@ -194,6 +203,7 @@ function validatePreflight({ mode, argv, env }) {
   return { databaseName: configuredName, uri: env.MONGODB_URI, expectedReplicaSetName: localTopology?.replicaSet || null };
 }
 
+// Run preflight before connecting, then confirm the driver's selected DB name.
 async function connectAfterPreflight({ mode, argv = process.argv.slice(2), env = process.env, connect }) {
   if (typeof connect !== 'function') throw new TypeError('A connection function is required.');
   const target = mode === 'atlas-demo-write' || mode === 'atlas-demo-read'
@@ -208,6 +218,7 @@ async function connectAfterPreflight({ mode, argv = process.argv.slice(2), env =
   return { ...target, connection };
 }
 
+// Classify a MongoDB hello result and whether its topology supports transactions.
 function classifyTopology(hello) {
   if (hello?.msg === 'isdbgrid') return { name: 'sharded', transactionsSupported: true };
   if (typeof hello?.setName === 'string' && hello.setName) {
@@ -219,6 +230,7 @@ function classifyTopology(hello) {
   return { name: 'unknown', transactionsSupported: false };
 }
 
+// Apply the minimum MongoDB version needed for transactions on this topology.
 function assessTransactionVersion(topology, versionArray) {
   if (!topology?.transactionsSupported) return false;
   if (!Array.isArray(versionArray) || versionArray.length < 2 || !versionArray.every(Number.isInteger)) return null;

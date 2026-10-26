@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const safety = require('./databaseSafety');
 
+// Read a password without echoing input; reject non-interactive execution.
 function askHidden(question) {
   return new Promise((resolve, reject) => {
     const input = process.stdin;
@@ -32,6 +33,7 @@ function askHidden(question) {
 }
 
 async function main() {
+  // Connect only after the database safety gate has approved the local target.
   const target = await safety.connectAfterPreflight({
     mode: 'local-write', argv: process.argv.slice(2),
     connect: (uri) => mongoose.connect(uri, { autoCreate: false, autoIndex: false, serverSelectionTimeoutMS: 10_000 })
@@ -39,6 +41,7 @@ async function main() {
   try {
     const hello = await mongoose.connection.db.admin().command({ hello: 1 });
     safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
+    // Normalize the account identifier before checking or creating an admin.
     const terminal = readline.createInterface({ input: process.stdin, output: process.stdout });
     const email = (await terminal.question('Local admin email: ')).trim().toLowerCase();
     terminal.close();
@@ -46,6 +49,7 @@ async function main() {
     const password = await askHidden('Password (input hidden): ');
     const passwordBytes = Buffer.byteLength(password, 'utf8');
     if (passwordBytes < 8 || passwordBytes > 72) throw new Error('Password must be 8 to 72 UTF-8 bytes.');
+    // Existing customers must prove their password and explicitly confirm promotion.
     let user = await User.findOne({ email });
     if (user) {
       if (user.isActive === false) throw new Error('That account is inactive; no change was made.');
@@ -65,8 +69,10 @@ async function main() {
       user = await User.create({ name, email, passwordHash: await bcrypt.hash(password, 12), role: 'admin' });
     }
     if (user.role !== 'admin' || !await bcrypt.compare(password, user.passwordHash)) throw new Error('Admin account verification failed.');
+    // Print only non-secret confirmation details after verifying the resulting account.
     process.stdout.write(JSON.stringify({ status: 'verified', database: target.databaseName, replicaSet: hello.setName, role: user.role }) + '\n');
   } finally {
+    // Do not leave an interactive setup command holding the DB connection.
     await mongoose.disconnect();
   }
 }

@@ -8,6 +8,7 @@ const Order = require('../models/Order');
 const CheckoutOperation = require('../models/CheckoutOperation');
 const { getJwtSecret, getJwtExpiresIn, signUserToken } = require('../middleware/auth');
 
+// Confirm the connected database can support the transaction-based checkout tests.
 function requireTransactionTopology(hello, attestedTopology) {
   const topology = safety.classifyTopology(hello);
   if (!topology.transactionsSupported || topology.name !== attestedTopology) {
@@ -16,6 +17,7 @@ function requireTransactionTopology(hello, attestedTopology) {
   return topology;
 }
 
+// Apply the isolated-database safety checks and verify the checkout's unique-key index.
 async function prepareIntegration(argv) {
   if (!getJwtSecret()) throw new safety.SafetyError('JWT_SECRET must be configured with at least 32 bytes before integration tests.');
   if (!getJwtExpiresIn()) throw new safety.SafetyError('JWT_EXPIRES_IN must be a supported duration before integration tests.');
@@ -35,6 +37,7 @@ async function prepareIntegration(argv) {
     const hello = await mongoose.connection.db.admin().command({ hello: 1 });
     safety.validateLocalReplicaSetHello(hello, target.expectedReplicaSetName);
     const topology = requireTransactionTopology(hello, envTopology);
+    // Ensure test prerequisites exist before creating disposable fixture records.
     await Promise.all([Product, User, Cart, Order, CheckoutOperation].map((model) => model.createIndexes()));
     const operationIndexes = await CheckoutOperation.collection.indexes();
     if (!operationIndexes.some((index) => index.name === 'uniq_checkout_operation_user_key'
@@ -48,6 +51,7 @@ async function prepareIntegration(argv) {
   }
 }
 
+// Create a uniquely named test customer with a non-login synthetic password hash.
 async function createFixtureUser(runId, index) {
   return User.create({
     name: `UrbanKart integration ${runId} ${index}`,
@@ -57,6 +61,7 @@ async function createFixtureUser(runId, index) {
   });
 }
 
+// Add a disposable product whose attributes identify the integration run.
 async function createFixtureProduct(runId, stock) {
   return Product.create({
     name: `UrbanKart integration ${runId}`,
@@ -68,20 +73,24 @@ async function createFixtureProduct(runId, stock) {
   });
 }
 
+// Create the cart line that checkout endpoints will consume.
 async function createFixtureCart(userId, productId, quantity) {
   return Cart.create({ userId, items: [{ productId, quantity }] });
 }
 
+// Sign an authenticated test token using the application's normal token helper.
 function tokenFor(user) {
   const token = signUserToken(user);
   if (!token) throw new Error('Could not sign an integration-test token with the configured JWT settings.');
   return token;
 }
 
+// Submit checkout with a fresh idempotency key for an independent test operation.
 async function checkoutRequest(baseUrl, token) {
   return checkoutRequestWithKey(baseUrl, token, crypto.randomUUID());
 }
 
+// Submit checkout with a caller-supplied key to test replay and conflict behavior.
 async function checkoutRequestWithKey(baseUrl, token, key) {
   return fetch(`${baseUrl}/api/cart/checkout`, {
     method: 'POST',
@@ -91,6 +100,7 @@ async function checkoutRequestWithKey(baseUrl, token, key) {
   });
 }
 
+// Ask the authenticated reconciliation endpoint for an existing checkout result.
 async function reconcileRequest(baseUrl, token, key) {
   return fetch(`${baseUrl}/api/cart/checkout/${encodeURIComponent(key)}`, {
     headers: { authorization: `Bearer ${token}` },
@@ -98,6 +108,7 @@ async function reconcileRequest(baseUrl, token, key) {
   });
 }
 
+// Delete only records whose IDs were captured from this test's fixtures.
 async function cleanupFixtures({ userIds = [], productId = null, productIds = [], cartIds = [] }) {
   const customerIds = userIds.map((id) => new mongoose.Types.ObjectId(id));
   if (customerIds.length) {
@@ -111,6 +122,7 @@ async function cleanupFixtures({ userIds = [], productId = null, productIds = []
   for (const id of userIds) await User.deleteOne({ _id: id });
 }
 
+// Start the application on an ephemeral loopback port for local HTTP testing.
 async function startHttpServer(app) {
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve, reject) => {
