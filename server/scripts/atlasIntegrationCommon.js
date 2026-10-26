@@ -5,10 +5,12 @@ const safety = require('./databaseSafety');
 const { loadSelectedDatabaseEnvironment } = require('../config/databaseEnvironment');
 const { LOCK_PATH, API_PROCESS_LOCK_PATH, acquireLocalProcessLock, acquireRecommendationSchedulerLock } = require('../jobs/recommendationSchedulerLock');
 
+// Pin the integration run to the intended Atlas database and cluster identity.
 const TARGET_DB = 'urbankart_atlas_demo';
 const TARGET_CLUSTER = 'urbankart-cluster';
 const RUN_MARKER_PREFIX = '__UK_ATLAS_IT__';
 
+// Require explicit profile, target, and operator confirmation before any connection.
 function loadAndValidateTarget(argv = process.argv.slice(2)) {
   if (process.env.URBANKART_DB_PROFILE !== 'atlas-demo') {
     throw new safety.SafetyError('Set URBANKART_DB_PROFILE=atlas-demo explicitly before loading the Atlas integration configuration.');
@@ -38,9 +40,11 @@ function loadAndValidateTarget(argv = process.argv.slice(2)) {
       || queryOptions.some(([name, value]) => encryptionOptions.has(name) && value === 'false')) {
     throw new safety.SafetyError('Atlas test URI must retain certificate-validating TLS; insecure TLS options are refused.');
   }
+  // A unique run marker lets fixture-related code identify only this run's data.
   return { ...target, clusterName: TARGET_CLUSTER, runMarker: `${RUN_MARKER_PREFIX}:${crypto.randomUUID()}` };
 }
 
+// Connect with schema automation disabled, then verify the live database identity.
 async function connectAndVerify(target) {
   mongoose.set('autoIndex', false);
   mongoose.set('autoCreate', false);
@@ -55,6 +59,7 @@ async function connectAndVerify(target) {
     });
     if (mongoose.connection.name !== TARGET_DB) throw new safety.SafetyError('Connected database name does not match the approved Atlas target.');
 
+    // Read topology, server version, and authentication state in parallel.
     const [hello, buildInfo, authStatus] = await Promise.all([
       mongoose.connection.db.admin().command({ hello: 1 }),
       mongoose.connection.db.admin().command({ buildInfo: 1 }),
@@ -63,6 +68,7 @@ async function connectAndVerify(target) {
     const verifiedTopology = safety.validateAtlasDemoHello(hello, buildInfo.versionArray, target.expectedTopology);
     if (!authStatus?.authInfo?.authenticatedUsers?.length) throw new safety.SafetyError('MongoDB connection did not report an authenticated database user.');
 
+    // Ensure the endpoint is the locally pinned Atlas host, not just any cluster.
     const hostDigest = crypto.createHash('sha256').update(new URL(target.uri).hostname.toLowerCase()).digest('hex');
     if (hostDigest !== process.env.URBANKART_ATLAS_HOST_SHA256) throw new safety.SafetyError('Atlas endpoint pin verification failed.');
     return { databaseName: mongoose.connection.name, topology: verifiedTopology.name, serverVersion: buildInfo.version };
@@ -73,6 +79,7 @@ async function connectAndVerify(target) {
   }
 }
 
+// A closed loopback port proves the foreground API cannot run its scheduler here.
 async function assertForegroundApiInactive({ env = process.env, connect = net.createConnection } = {}) {
   const configuredPort = env.PORT || '5000';
   if (!/^\d+$/.test(String(configuredPort)) || Number(configuredPort) < 1 || Number(configuredPort) > 65535) {
@@ -99,6 +106,7 @@ async function assertForegroundApiInactive({ env = process.env, connect = net.cr
   });
 }
 
+// Hold both scheduler and API process locks so an integration run cannot overlap them.
 async function acquireIntegrationSchedulerLease({ env = process.env, lockPath = LOCK_PATH,
   apiLockPath = API_PROCESS_LOCK_PATH, connect = net.createConnection } = {}) {
   let schedulerLease;
@@ -130,6 +138,7 @@ async function acquireIntegrationSchedulerLease({ env = process.env, lockPath = 
   }
 }
 
+// Close the shared Mongoose connection when the caller has completed its work.
 async function close() {
   if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
 }
